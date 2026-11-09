@@ -8,15 +8,30 @@ use endl_core::cli::{parse_args, CliRequest};
 use endl_core::mask::mask_secrets;
 use state::AppState;
 use std::sync::atomic::Ordering;
-use tauri::{Emitter, Manager, WindowEvent};
+use std::time::Duration;
+use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 pub const EV_CLI: &str = "cli-request";
 
-/// Quit for real (tray → Quit): lets the window close instead of hiding it.
+/// Quit for real (tray → Quit): lets the window close instead of hiding it. The queue is
+/// stopped in the `Exit` event so downloads can resume next time.
 pub fn quit(app: &tauri::AppHandle) {
     app.state::<AppState>().quitting.store(true, Ordering::SeqCst);
     log::info!("quitting");
     app.exit(0);
+}
+
+/// Stop the queue and the engines (aria2 saves its resume data). Bounded so a stuck engine
+/// cannot keep the app from exiting.
+fn stop_queue(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<AppState>() {
+        let queue = state.queue.clone();
+        tauri::async_runtime::block_on(async move {
+            if tokio::time::timeout(Duration::from_secs(5), queue.shutdown()).await.is_err() {
+                log::warn!("queue did not stop in time");
+            }
+        });
+    }
 }
 
 fn handle_second_instance(app: &tauri::AppHandle, argv: Vec<String>) {
@@ -60,6 +75,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .setup(move |app| {
             let data_dir = match &portable {
@@ -71,7 +87,7 @@ pub fn run() {
                 None => app.path().app_log_dir()?,
             };
             let downloads = app.path().download_dir().or_else(|_| app.path().home_dir().map(|h| h.join("Downloads")))?;
-            let state = AppState::new(data_dir, log_dir, downloads, portable.is_some()).map_err(|e| Box::new(std::io::Error::other(e.to_string())))?;
+            let (state, scheduler) = AppState::new(app.handle(), data_dir, log_dir, downloads, portable.is_some()).map_err(|e| Box::new(std::io::Error::other(e.to_string())))?;
 
             let launch: CliRequest = parse_args(std::env::args().skip(1));
             let hidden = launch.minimized || state.settings.read().start_minimized;
@@ -79,6 +95,7 @@ pub fn run() {
                 *state.launch.lock() = Some(launch);
             }
             app.manage(state);
+            tauri::async_runtime::spawn(scheduler.run());
             tray::install(app.handle())?;
             tray::fit_to_monitor(app.handle());
             if !hidden {
@@ -105,6 +122,8 @@ pub fn run() {
             settings::import_settings,
             tasks::list_tasks,
             tasks::add_links,
+            tasks::import_links,
+            tasks::clear_completed,
             tasks::task_action,
             tasks::pause_all,
             tasks::resume_all,
@@ -123,9 +142,16 @@ pub fn run() {
             system::quit_app,
             system::hide_to_tray,
         ])
-        .run(tauri::generate_context!());
-    if let Err(e) = result {
-        eprintln!("ENDownloader could not start: {e}");
-        std::process::exit(1);
+        .build(tauri::generate_context!());
+    match result {
+        Ok(app) => app.run(|app, event| {
+            if let RunEvent::Exit = event {
+                stop_queue(app);
+            }
+        }),
+        Err(e) => {
+            eprintln!("ENDownloader could not start: {e}");
+            std::process::exit(1);
+        }
     }
 }

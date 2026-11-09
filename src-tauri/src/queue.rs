@@ -1,19 +1,23 @@
-//! The download queue as the UI and tray see it: adding links, task actions, and the
-//! events that keep the task list in sync. (Phase 2 adds the scheduler that starts
-//! queued tasks on the engines.)
+//! Glue between the UI and the scheduler: adding links, task actions, and the events that
+//! keep the task list in sync (`tasks-upsert`, `tasks-removed`, `tasks-progress`).
 
 use crate::state::AppState;
 use endl_core::db::NewTask;
 use endl_core::filename::name_from_url;
 use endl_core::links::extract_links;
+use endl_core::scheduler::{Notifier, ProgressItem, RunConfig};
 use endl_core::task::{Action, Task};
 use endl_core::Result;
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 
 pub const EV_UPSERT: &str = "tasks-upsert";
 pub const EV_REMOVED: &str = "tasks-removed";
+pub const EV_PROGRESS: &str = "tasks-progress";
 
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +40,64 @@ pub fn emit_upsert(app: &AppHandle, tasks: &[Task]) {
     if !tasks.is_empty() {
         let _ = app.emit(EV_UPSERT, tasks);
     }
+}
+
+/// Sends scheduler changes to the window, and desktop notifications when a download ends
+/// while the window is not in front.
+pub struct UiNotifier(pub AppHandle);
+
+impl UiNotifier {
+    fn notify(&self, title: &str, body: &str) {
+        let Some(state) = self.0.try_state::<AppState>() else { return };
+        if !state.settings.read().notify_on_finish {
+            return;
+        }
+        let in_front = self.0.get_webview_window("main").is_some_and(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false));
+        if in_front {
+            return;
+        }
+        if let Err(e) = self.0.notification().builder().title(title).body(body).show() {
+            log::debug!("notification failed: {e}");
+        }
+    }
+}
+
+fn display_name(t: &Task) -> String {
+    t.title.clone().or_else(|| t.filename.clone()).unwrap_or_else(|| t.url.clone())
+}
+
+impl Notifier for UiNotifier {
+    fn upsert(&self, tasks: &[Task]) {
+        emit_upsert(&self.0, tasks);
+    }
+    fn removed(&self, ids: &[i64]) {
+        let _ = self.0.emit(EV_REMOVED, ids);
+    }
+    fn progress(&self, items: &[ProgressItem]) {
+        let _ = self.0.emit(EV_PROGRESS, items);
+    }
+    fn finished(&self, t: &Task) {
+        self.notify("Download complete", &display_name(t));
+    }
+    fn failed(&self, t: &Task) {
+        self.notify("Download failed", &format!("{}\n{}", display_name(t), t.error.clone().unwrap_or_default()));
+    }
+}
+
+/// The scheduler reads its limits from the live settings each time it decides.
+pub fn run_config_source(app: AppHandle) -> Arc<dyn Fn() -> RunConfig + Send + Sync> {
+    Arc::new(move || {
+        let Some(state) = app.try_state::<AppState>() else { return RunConfig::default() };
+        let s = state.settings.read();
+        RunConfig {
+            max_parallel: s.max_parallel as usize,
+            conflict: s.conflict.clone(),
+            keep_partial: s.keep_partial,
+            retries: s.retries,
+            retry_base: Duration::from_secs(5),
+            speed_limit: 0,
+        }
+    })
 }
 
 pub fn add_links(app: &AppHandle, text: &str, opts: AddOptions) -> Result<AddResult> {
@@ -75,50 +137,29 @@ pub fn add_links(app: &AppHandle, text: &str, opts: AddOptions) -> Result<AddRes
         result.added = state.db.insert_tasks(&new)?;
         log::info!("added {} task(s)", result.added.len());
         emit_upsert(app, &result.added);
+        state.queue.kick();
     }
     Ok(result)
 }
 
-pub fn apply(app: &AppHandle, ids: &[i64], action: Action) -> Result<Vec<Task>> {
-    let state = app.state::<AppState>();
-    let changed = state.db.apply_action(ids, action)?;
-    emit_upsert(app, &changed);
-    Ok(changed)
+pub async fn apply(app: &AppHandle, ids: Vec<i64>, action: Action) -> Result<Vec<Task>> {
+    let queue = app.state::<AppState>().queue.clone();
+    queue.act(ids, action).await
 }
 
-fn all_ids(app: &AppHandle) -> Result<Vec<i64>> {
-    Ok(app.state::<AppState>().db.list_tasks()?.into_iter().map(|t| t.id).collect())
+pub async fn pause_all(app: &AppHandle) -> Result<usize> {
+    let queue = app.state::<AppState>().queue.clone();
+    Ok(queue.pause_all().await?.len())
 }
 
-pub fn pause_all(app: &AppHandle) -> Result<usize> {
-    let ids = all_ids(app)?;
-    Ok(apply(app, &ids, Action::Pause)?.len())
+pub async fn resume_all(app: &AppHandle) -> Result<usize> {
+    let queue = app.state::<AppState>().queue.clone();
+    Ok(queue.resume_all().await?.len())
 }
 
-pub fn resume_all(app: &AppHandle) -> Result<usize> {
-    let ids = all_ids(app)?;
-    Ok(apply(app, &ids, Action::Resume)?.len())
-}
-
-/// Remove tasks from the list; with `delete_files`, also delete their downloaded files.
-pub fn remove(app: &AppHandle, ids: &[i64], delete_files: bool) -> Result<usize> {
-    let state = app.state::<AppState>();
-    let removed = state.db.delete_tasks(ids)?;
-    if delete_files {
-        for t in &removed {
-            if let Some(name) = &t.filename {
-                let p = PathBuf::from(&t.folder).join(name);
-                if p.is_file() {
-                    if let Err(e) = std::fs::remove_file(&p) {
-                        log::warn!("could not delete {}: {e}", p.display());
-                    }
-                }
-            }
-        }
-    }
-    let ids: Vec<i64> = removed.iter().map(|t| t.id).collect();
-    if !ids.is_empty() {
-        let _ = app.emit(EV_REMOVED, &ids);
-    }
-    Ok(ids.len())
+/// Remove tasks from the list (stopping running ones); with `delete_files`, also delete
+/// their downloaded files.
+pub async fn remove(app: &AppHandle, ids: Vec<i64>, delete_files: bool) -> Result<usize> {
+    let queue = app.state::<AppState>().queue.clone();
+    queue.remove(ids, delete_files).await
 }

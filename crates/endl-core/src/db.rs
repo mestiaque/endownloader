@@ -259,6 +259,15 @@ impl Db {
         self.get_task(id)
     }
 
+    /// Set or clear the error text shown under a task (without changing its status).
+    pub fn set_error(&self, id: i64, err: Option<&DlError>) -> Result<()> {
+        self.conn.lock().execute(
+            "UPDATE tasks SET error = ?1, error_kind = ?2 WHERE id = ?3",
+            params![err.map(|e| e.to_string()), err.map(|e| e.kind()), id],
+        )?;
+        Ok(())
+    }
+
     pub fn update_progress(&self, id: i64, done: u64, total: Option<u64>, speed: u64, connections: u32) -> Result<()> {
         self.conn.lock().execute(
             "UPDATE tasks SET done = ?1, total = COALESCE(?2, total), speed = ?3, connections = ?4 WHERE id = ?5",

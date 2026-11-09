@@ -8,3 +8,4 @@ release/
 masterprompt.md
 .vscode/
 .pnpm-store/
+src-tauri/binaries/

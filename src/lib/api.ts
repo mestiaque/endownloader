@@ -14,6 +14,8 @@ export const api = {
   listTasks: () => invoke<Task[]>("list_tasks"),
   addLinks: (text: string, opts: { folder?: string | null; quality?: string | null; allowDuplicates?: boolean } = {}) =>
     invoke<AddResult>("add_links", { text, folder: opts.folder ?? null, quality: opts.quality ?? null, allowDuplicates: opts.allowDuplicates ?? false }),
+  importLinks: (path: string) => invoke<AddResult>("import_links", { path }),
+  clearCompleted: () => invoke<number>("clear_completed"),
   taskAction: (ids: number[], action: TaskAction) => invoke<Task[]>("task_action", { ids, action }),
   pauseAll: () => invoke<number>("pause_all"),
   resumeAll: () => invoke<number>("resume_all"),

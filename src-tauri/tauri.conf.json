@@ -20,7 +20,7 @@
         "minWidth": 900,
         "minHeight": 560,
         "backgroundColor": "#131315",
-        "dragDropEnabled": true,
+        "dragDropEnabled": false,
         "center": true,
         "decorations": false,
         "visible": false
@@ -38,14 +38,36 @@
     "shortDescription": "Fast download manager for files and media",
     "longDescription": "ENDownloader downloads files and media from links, in parallel and in the background, with resume after restarts.",
     "copyright": "© 2026 M. Estiaque Ahmed Khan · MIT License",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "linux": {
-      "deb": { "section": "net", "desktopTemplate": "endownloader.desktop" },
-      "rpm": { "desktopTemplate": "endownloader.desktop" }
+      "deb": {
+        "section": "net",
+        "desktopTemplate": "endownloader.desktop",
+        "depends": [
+          "aria2"
+        ]
+      },
+      "rpm": {
+        "desktopTemplate": "endownloader.desktop",
+        "depends": [
+          "aria2"
+        ]
+      }
     },
     "windows": {
-      "nsis": { "installMode": "currentUser", "displayLanguageSelector": false },
-      "webviewInstallMode": { "type": "downloadBootstrapper" }
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
     },
     "homepage": "https://mestiaque.com"
   }

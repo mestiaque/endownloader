@@ -1,5 +1,6 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { listen } from "@tauri-apps/api/event";
+import { Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
@@ -101,6 +102,60 @@ function useKeys() {
   }, []);
 }
 
+/** Drop links (from a browser or text) or a .txt link list anywhere on the window. */
+function useDropLinks(): boolean {
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    let depth = 0;
+    const accepts = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].some((t) => t === "Files" || t === "text/uri-list" || t === "text/plain");
+    const enter = (e: DragEvent) => {
+      if (!accepts(e)) return;
+      e.preventDefault();
+      depth++;
+      setOver(true);
+    };
+    const leave = () => {
+      depth = Math.max(0, depth - 1);
+      if (!depth) setOver(false);
+    };
+    const overFn = (e: DragEvent) => {
+      if (!accepts(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    };
+    const drop = async (e: DragEvent) => {
+      depth = 0;
+      setOver(false);
+      const dt = e.dataTransfer;
+      if (!dt) return;
+      e.preventDefault();
+      const parts: string[] = [];
+      for (const f of [...dt.files]) {
+        if (f.size > 20 * 1024 * 1024) {
+          toast({ kind: "error", title: `${f.name} is too large to be a link list` });
+          continue;
+        }
+        if (f.type.startsWith("text/") || /\.(txt|list|csv|md|html?)$/i.test(f.name)) parts.push(await f.text());
+        else toast({ kind: "info", title: `${f.name} is not a link list`, detail: "Drop links, or a .txt file with links." });
+      }
+      if (!dt.files.length) parts.push(dt.getData("text/uri-list") || dt.getData("text/plain"));
+      const text = parts.join("\n");
+      if (text.trim()) void addLinks(text);
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("dragover", overFn);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("dragover", overFn);
+      window.removeEventListener("drop", drop);
+    };
+  }, []);
+  return over;
+}
+
 function handleCli(req: CliRequest | null) {
   if (req?.urls.length) void addLinks(req.urls.join("\n"), { folder: req.folder, quality: req.quality });
 }
@@ -109,6 +164,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   useTheme();
   useKeys();
+  const dropping = useDropLinks();
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -149,6 +205,15 @@ export default function App() {
           <StatusBar />
         </main>
       </div>
+      {dropping && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg/70 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-accent bg-panel px-10 py-8 text-center shadow-xl">
+            <Link2 className="h-7 w-7 text-accent" />
+            <div className="text-[14px] font-medium">Drop to add downloads</div>
+            <div className="text-[12px] text-muted">Links, or a text file with links</div>
+          </div>
+        </div>
+      )}
       <SettingsDialog />
       <ShortcutsDialog />
       <ConfirmHost />

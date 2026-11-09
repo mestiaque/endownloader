@@ -35,6 +35,8 @@ pub fn set_setting(app: AppHandle, state: State<AppState>, key: String, value: V
     if key == "startWithOs" {
         apply_autostart(&app, next.start_with_os)?;
     }
+    // More parallel slots may be free now.
+    state.queue.kick();
     Ok(next)
 }
 

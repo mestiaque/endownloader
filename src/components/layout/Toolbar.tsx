@@ -1,9 +1,11 @@
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
-import { ClipboardPaste, Keyboard, Link2, Monitor, Moon, MoreHorizontal, PanelLeft, Pause, Play, Settings, Sparkles, Sun, X } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { CheckCheck, ClipboardPaste, FileText, Keyboard, Link2, Monitor, Moon, MoreHorizontal, PanelLeft, Pause, Play, Settings, Sparkles, Sun, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../lib/api";
 import { useSettings } from "../../store/settings";
-import { addLinks } from "../../store/tasks";
+import { errorMessage } from "../../lib/api";
+import { addLinks, importLinksFile } from "../../store/tasks";
 import { toast, useUi } from "../../store/ui";
 import { DropdownMenu } from "../ui/menus";
 import { Button, IconButton } from "../ui/primitives";
@@ -85,6 +87,20 @@ function LinkBox() {
   );
 }
 
+async function importFromFile() {
+  const path = await open({ multiple: false, directory: false, title: "Import links from a text file", filters: [{ name: "Text files", extensions: ["txt", "list", "csv", "md", "html", "htm"] }, { name: "All files", extensions: ["*"] }] });
+  if (typeof path === "string") await importLinksFile(path);
+}
+
+async function clearCompleted() {
+  try {
+    const n = await api.clearCompleted();
+    toast({ kind: "info", title: n ? `Cleared ${n} completed download${n > 1 ? "s" : ""}` : "Nothing to clear", detail: n ? "The files stay on disk." : undefined });
+  } catch (e) {
+    toast({ kind: "error", title: "Could not clear", detail: errorMessage(e) });
+  }
+}
+
 export function Toolbar() {
   const { settings, set } = useSettings();
   const themeIcon =
@@ -121,6 +137,9 @@ export function Toolbar() {
           </IconButton>
         }
         entries={[
+          { label: "Import links from file…", icon: <FileText className="h-3.5 w-3.5" />, onSelect: () => void importFromFile() },
+          { label: "Clear completed", icon: <CheckCheck className="h-3.5 w-3.5" />, onSelect: () => void clearCompleted() },
+          { separator: true },
           { label: "Keyboard shortcuts", icon: <Keyboard className="h-3.5 w-3.5" />, shortcut: "?", onSelect: () => useUi.getState().openDialog("shortcuts") },
           { separator: true },
           { label: "Hide to tray", onSelect: () => void api.hideToTray() },

@@ -6,7 +6,7 @@ use crate::error::DlError;
 use crate::task::EngineKind;
 use async_trait::async_trait;
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
@@ -77,16 +77,44 @@ pub enum EngineEvent {
     Failed(DlError),
 }
 
+/// One download back end (aria2, yt-dlp, gallery-dl).
+///
+/// Contract:
+/// - `start` returns quickly (no long analysis inline); progress, metadata and the final
+///   result arrive on `events`, ending with exactly one `Finished` or `Failed`.
+/// - Starting a task whose partial data is on disk continues it (resume after a restart).
+/// - `pause` stops the transfer but keeps the task inside the engine so `resume` can go on
+///   without re-negotiating; if `resume` fails the queue simply calls `start` again.
+/// - After `pause`/`cancel` no more events are sent for that task.
+/// - Child processes never outlive their task or the app.
 #[async_trait]
 pub trait Engine: Send + Sync {
     fn kind(&self) -> EngineKind;
-    /// Start (or resume, when `spec.resume_ref` is set) a task. Events for it go to `events`
-    /// until `Finished` or `Failed` is sent.
+    /// Start (or continue from partial data) a task.
     async fn start(&self, spec: TaskSpec, events: mpsc::Sender<EngineEvent>) -> Result<EngineRef, DlError>;
     async fn pause(&self, r: &EngineRef) -> Result<(), DlError>;
     async fn resume(&self, r: &EngineRef) -> Result<(), DlError>;
     /// Stop the task and its child processes. Removes partial files unless `keep_partial`.
     async fn cancel(&self, r: &EngineRef, keep_partial: bool) -> Result<(), DlError>;
+    /// Whether unfinished data for `path` from an earlier run is on disk (so a start resumes).
+    fn has_partial(&self, _path: &Path) -> bool {
+        false
+    }
+    /// Delete unfinished data for `path` of a task that is not running.
+    fn discard_partial(&self, path: &Path) {
+        remove_quietly(path);
+    }
+    /// App is quitting: stop everything, saving whatever lets a later start resume.
+    async fn shutdown(&self) {}
+}
+
+/// Remove a file, ignoring "not found" and logging other errors.
+pub fn remove_quietly(path: &Path) {
+    match std::fs::remove_file(path) {
+        Ok(()) => log::debug!("deleted {}", path.display()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => log::warn!("could not delete {}: {e}", path.display()),
+    }
 }
 
 /// Limits how often progress for one task reaches the UI (~4 per second by default).

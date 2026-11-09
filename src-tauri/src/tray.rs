@@ -20,14 +20,20 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main(app),
             "pause-all" => {
-                if let Err(e) = queue::pause_all(app) {
-                    log::error!("pause all: {e}");
-                }
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = queue::pause_all(&app).await {
+                        log::error!("pause all: {e}");
+                    }
+                });
             }
             "resume-all" => {
-                if let Err(e) = queue::resume_all(app) {
-                    log::error!("resume all: {e}");
-                }
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = queue::resume_all(&app).await {
+                        log::error!("resume all: {e}");
+                    }
+                });
             }
             "quit" => crate::quit(app),
             _ => {}

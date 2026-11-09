@@ -75,6 +75,7 @@ pub fn diagnostics(app: AppHandle, state: State<AppState>) -> Result<String> {
     out.push_str(&format!("ENDownloader {}\n", app.package_info().version));
     out.push_str(&format!("OS: {} {} ({})\n", std::env::consts::OS, os_version(), std::env::consts::ARCH));
     out.push_str(&format!("Portable: {}\n", state.portable));
+    out.push_str(&format!("aria2c: {}\n", state.aria2_path.as_ref().map_or_else(|| "not found".to_string(), |p| p.display().to_string())));
     out.push_str(&format!(
         "Settings: parallel={} connections={} categories={} conflict={} closeToTray={} startWithOs={} theme={} language={}\n",
         s.max_parallel,

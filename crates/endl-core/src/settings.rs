@@ -53,6 +53,8 @@ pub struct Settings {
     pub detect_duplicates: bool,
     pub use_categories: bool,
     pub keep_partial: bool,
+    /// Automatic retries for network errors (with growing waits).
+    pub retries: u32,
     pub categories: Vec<Category>,
     // Appearance
     /// "dark" | "light" | "glass" | "system"
@@ -78,6 +80,7 @@ impl Default for Settings {
             detect_duplicates: true,
             use_categories: true,
             keep_partial: false,
+            retries: 3,
             categories: default_categories(),
             theme: "dark".into(),
             accent: "#3b82f6".into(),
@@ -116,6 +119,7 @@ impl Settings {
     pub fn validated(mut self) -> Self {
         self.max_parallel = self.max_parallel.clamp(1, MAX_PARALLEL);
         self.connections = self.connections.clamp(1, MAX_CONNECTIONS);
+        self.retries = self.retries.min(10);
         if !matches!(self.conflict.as_str(), "rename" | "overwrite" | "skip" | "ask") {
             self.conflict = "rename".into();
         }

@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { byPosition, inView, matchesSearch, type ViewId } from "../engines/taskView";
 import { api, errorMessage, type TaskAction } from "../lib/api";
-import type { Task } from "../lib/types";
+import type { AddResult, ProgressItem, Task } from "../lib/types";
 import { useSettings } from "./settings";
 import { confirmDialog, toast } from "./ui";
 
@@ -24,6 +24,7 @@ interface TaskStore {
   setSelection(ids: number[]): void;
   clearSelection(): void;
   upsert(tasks: Task[]): void;
+  applyProgress(items: ProgressItem[]): void;
   removeLocal(ids: number[]): void;
 }
 
@@ -41,9 +42,11 @@ export const useTasks = create<TaskStore>((set, get) => ({
     set({ tasks: [...list].sort(byPosition), byId: new Map(list.map((t) => [t.id, t])), loaded: true });
     const un1 = listen<Task[]>("tasks-upsert", (e) => get().upsert(e.payload));
     const un2 = listen<number[]>("tasks-removed", (e) => get().removeLocal(e.payload));
+    const un3 = listen<ProgressItem[]>("tasks-progress", (e) => get().applyProgress(e.payload));
     return () => {
       un1.then((f) => f());
       un2.then((f) => f());
+      un3.then((f) => f());
     };
   },
 
@@ -89,6 +92,19 @@ export const useTasks = create<TaskStore>((set, get) => ({
     set({ tasks, byId });
   },
 
+  /** Live progress (≤ 4 batches/s): patch the rows in place, order unchanged. */
+  applyProgress(items) {
+    const byId = new Map(get().byId);
+    let changed = false;
+    for (const p of items) {
+      const old = byId.get(p.id);
+      if (!old) continue;
+      byId.set(p.id, { ...old, done: p.done, total: p.total ?? old.total, speed: p.speed, connections: p.connections });
+      changed = true;
+    }
+    if (changed) set({ byId, tasks: get().tasks.map((t) => byId.get(t.id) ?? t) });
+  },
+
   removeLocal(ids) {
     const gone = new Set(ids);
     const byId = new Map(get().byId);
@@ -124,7 +140,25 @@ export function targetTasks(): Task[] {
 export async function addLinks(text: string, opts: { folder?: string | null; quality?: string | null } = {}): Promise<number> {
   if (!text.trim()) return 0;
   try {
-    const r = await api.addLinks(text, opts);
+    return reportAdded(await api.addLinks(text, opts), opts);
+  } catch (e) {
+    toast({ kind: "error", title: "Could not add links", detail: errorMessage(e) });
+    return 0;
+  }
+}
+
+/** Add the links found in a text file (Import, or a dropped .txt file). */
+export async function importLinksFile(path: string): Promise<number> {
+  try {
+    return reportAdded(await api.importLinks(path), {});
+  } catch (e) {
+    toast({ kind: "error", title: "Could not import links", detail: errorMessage(e) });
+    return 0;
+  }
+}
+
+function reportAdded(r: AddResult, opts: { folder?: string | null; quality?: string | null }): number {
+  {
     if (r.added.length) {
       toast({ kind: "success", title: r.added.length === 1 ? "Added 1 download" : `Added ${r.added.length} downloads` });
       useTasks.getState().setSelection(r.added.map((t) => t.id));
@@ -146,9 +180,6 @@ export async function addLinks(text: string, opts: { folder?: string | null; qua
     if (r.invalid.length) toast({ kind: "error", title: `${r.invalid.length} invalid link(s) skipped`, detail: r.invalid.slice(0, 3).join("\n") });
     if (!r.added.length && !r.duplicates.length && !r.invalid.length) toast({ kind: "info", title: "No links found", detail: "Paste one or more links (http, https, ftp or magnet)." });
     return r.added.length;
-  } catch (e) {
-    toast({ kind: "error", title: "Could not add links", detail: errorMessage(e) });
-    return 0;
   }
 }
 

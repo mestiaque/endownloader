@@ -185,6 +185,9 @@ function DownloadsSection() {
       <Field label="Connections per download" hint="More connections are faster on servers that allow it (8 is a good default)">
         <Select value={s.connections} onChange={(v) => void set("connections", v)} options={Array.from({ length: 16 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))} />
       </Field>
+      <Field label="Retry failed downloads" hint="Network errors and busy servers are retried with growing waits (5 s, 10 s, 20 s…)">
+        <Select value={s.retries} onChange={(v) => void set("retries", v)} options={[0, 1, 2, 3, 5, 10].map((n) => ({ value: n, label: n === 0 ? "Never" : `${n} time${n > 1 ? "s" : ""}` }))} />
+      </Field>
       <Field label="When the file already exists">
         <Select
           value={s.conflict}
@@ -193,7 +196,6 @@ function DownloadsSection() {
             { value: "rename", label: "Rename the new file" },
             { value: "overwrite", label: "Overwrite" },
             { value: "skip", label: "Skip the download" },
-            { value: "ask", label: "Ask me" },
           ]}
         />
       </Field>

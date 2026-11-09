@@ -5,8 +5,13 @@ sites (YouTube, TikTok, Instagram… via yt-dlp), singly or in bulk, in parallel
 background, with resume after restarts and crashes. Built with Tauri 2, Rust and React.
 Sister apps: **ENViewer** (images) and **ENPlayer** (video and music); same look and settings.
 
-Status: **Phase 1** (skeleton) is done: the window, SQLite queue/history/settings, tray,
-single instance, command line, logs. Downloading starts in Phase 2 (aria2 engine).
+Status: **Phase 2** is done. The aria2 engine downloads files over several connections, with a
+queue that runs several downloads at once, pause/resume, automatic retries, and resume after a
+crash or restart. Phase 3 adds media sites (yt-dlp + FFmpeg). How it works:
+[docs/how-it-works.md](docs/how-it-works.md).
+
+aria2: on Ubuntu the `.deb` depends on the `aria2` package; Windows bundles the official
+`aria2c.exe` (fetched with a checksum check by `scripts/fetch-sidecars.sh`).
 
 ## Quick start (development)
 
@@ -32,12 +37,17 @@ crates/endl-core/   pure Rust, unit-tested: errors, task state machine, engine t
                     settings + categories, link extraction, file names, CLI parsing, secret masking
 src-tauri/          Tauri shell: commands, queue events, tray, close-to-tray, autostart, logging
 src/                React UI: engines/ (pure helpers + tests), store/ (zustand), components/
-scripts/            Docker build environment and the headless smoke test
+crates/endl-core/src/aria2.rs      aria2c process + JSON-RPC engine
+crates/endl-core/src/scheduler.rs  queue runner: parallel slots, pause/resume, retries, conflicts, progress batching
+scripts/            Docker build environment, sidecar fetch, headless tests, local Range test server
+docs/               how downloading works (ranges, HLS/DASH, yt-dlp, FFmpeg, DRM)
 ```
 
 ## Tests
 
 ```bash
-cargo test -p endl-core          # 45 tests: links, file names, settings, state machine, DB + crash recovery, masking, CLI, throttle
+cargo test -p endl-core          # unit tests + scheduler (fake engine) + aria2 end-to-end (skipped without aria2c)
+scripts/docker/run.sh "cargo test -p endl-core --test aria2_e2e -- --nocapture --test-threads=1"
+scripts/docker/run.sh "dbus-run-session -- scripts/test/phase2-crash-resume.sh"   # real app: 5 parallel, kill -9, restart, all resume
 npx pnpm@9.15.0 test             # task views, progress (never a fake %), ETA
 ```

@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS: Settings = {
   detectDuplicates: true,
   useCategories: true,
   keepPartial: false,
+  retries: 3,
   categories: [],
   theme: "dark",
   accent: "#3b82f6",

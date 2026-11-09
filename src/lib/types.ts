@@ -26,6 +26,16 @@ export interface Task {
   options: unknown;
 }
 
+/** Live progress batch item (`tasks-progress` event). */
+export interface ProgressItem {
+  id: number;
+  done: number;
+  total: number | null;
+  speed: number;
+  connections: number;
+  etaSecs: number | null;
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -46,6 +56,7 @@ export interface Settings {
   detectDuplicates: boolean;
   useCategories: boolean;
   keepPartial: boolean;
+  retries: number;
   categories: Category[];
   theme: "dark" | "light" | "glass" | "system";
   accent: string;
