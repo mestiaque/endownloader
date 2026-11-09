@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Download, ExternalLink, Film, ListVideo, Music, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, Check, Clock, Download, ExternalLink, Film, ListVideo, MonitorPlay, Music, RefreshCw, User, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { cn, formatBytes } from "../../lib/format";
@@ -18,19 +18,6 @@ export function formatDuration(sec: number | null | undefined): string {
 }
 
 const sizeText = (o: MediaOption) => (o.size ? `${o.sizeEstimated ? "~" : ""}${formatBytes(o.size)}` : "—");
-
-function DownloadButton({ done, onClick }: { done: boolean; onClick: () => void }) {
-  return (
-    <Button size="sm" variant={done ? "ghost" : "default"} onClick={onClick} className="min-w-[104px] justify-center" title={done ? "Added to the queue — click to add again" : "Add to the queue"}>
-      {done ? <Check className="h-3.5 w-3.5 text-success" /> : <Download className="h-3.5 w-3.5" />}
-      {done ? "Added" : "Download"}
-    </Button>
-  );
-}
-
-function Th({ children, right, w }: { children?: React.ReactNode; right?: boolean; w?: string }) {
-  return <th className={cn("px-2 py-1.5 text-[11px] font-semibold text-muted", right ? "text-right" : "text-left", w)}>{children}</th>;
-}
 
 function Thumb({ src, duration, live }: { src: string | null | undefined; duration?: number | null; live?: boolean }) {
   const [broken, setBroken] = useState(false);
@@ -121,106 +108,189 @@ function CardError({ card }: { card: Card }) {
   );
 }
 
+/** "Full HD", "4K"… for a video height. */
+function qualityBadge(h: number | null): string | null {
+  if (!h) return null;
+  if (h >= 4320) return "8K";
+  if (h >= 2160) return "4K";
+  if (h >= 1440) return "2K";
+  if (h >= 1080) return "FHD";
+  if (h >= 720) return "HD";
+  return null;
+}
+
+/** "Best (1080p)" → "1080p"; other labels unchanged. */
+const shortLabel = (o: MediaOption) => o.label.replace(/^Best \((.+)\)$/, "$1");
+
+/**
+ * The options shown as tiles. "Best (1080p)" and a plain "1080p" with the same resolution
+ * and size are the same download for the user: keep the Best one (its format string falls
+ * back more gracefully) and mark it with a badge.
+ */
+function dedupe(options: MediaOption[]): { list: MediaOption[]; best: MediaOption | null } {
+  const best = options.find((o) => o.label.startsWith("Best")) ?? null;
+  const list = options.filter((o) => o === best || !best || !(o.resolution === best.resolution && o.ext === best.ext && (o.size === best.size || !o.size || !best.size)));
+  return { list, best };
+}
+
+/** A value shared by every option ("MP4", "25 fps"…), shown once instead of in every tile. */
+function common<T>(options: MediaOption[], pick: (o: MediaOption) => T | null): T | null {
+  const vals = options.map(pick).filter((v) => v != null) as T[];
+  return vals.length === options.length && vals.every((v) => v === vals[0]) ? vals[0] : null;
+}
+
+/** Link without tracking/playlist noise, for display only. */
+function displayUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    for (const k of ["list", "start_radio", "index", "pp", "si", "feature", "utm_source", "utm_medium", "utm_campaign"]) u.searchParams.delete(k);
+    return `${u.host.replace(/^www\./, "")}${u.pathname}${u.search}`;
+  } catch {
+    return url;
+  }
+}
+
+function QualityTile({ o, best, selected, done, onSelect, onDownload, showExt, showFps }: {
+  o: MediaOption; best: boolean; selected: boolean; done: boolean; onSelect: () => void; onDownload: () => void; showExt: boolean; showFps: boolean;
+}) {
+  const badge = o.kind === "video" ? qualityBadge(o.height) : null;
+  const sub = [showExt ? o.ext : null, showFps && o.fps ? `${o.fps} fps` : null, sizeText(o)].filter(Boolean).join(" · ");
+  return (
+    <button
+      onClick={onSelect}
+      onDoubleClick={onDownload}
+      title={`${o.label}${o.resolution ? ` · ${o.resolution}` : ""}${o.codecs ? ` · ${o.codecs}` : ""} — double-click to download`}
+      className={cn(
+        "group relative flex min-w-0 flex-col items-start rounded-lg border px-3 py-2 text-left transition-colors",
+        selected ? "border-accent bg-accent/10 ring-1 ring-accent" : "border-line bg-raised/40 hover:border-faint hover:bg-raised",
+      )}
+    >
+      <span className="flex w-full items-center gap-1.5">
+        <span className="text-[14px] font-semibold tabular-nums">{shortLabel(o)}</span>
+        {badge && <span className="rounded bg-fg/10 px-1 text-[10px] font-bold tracking-wide text-muted">{badge}</span>}
+        {o.fps && o.fps > 30 && <span className="rounded bg-fg/10 px-1 text-[10px] font-bold text-muted">{o.fps}</span>}
+        <span className="flex-1" />
+        {done && <Check className="h-3.5 w-3.5 shrink-0 text-success" />}
+      </span>
+      <span className="mt-0.5 w-full truncate text-[11px] tabular-nums text-muted">{sub || "\u00a0"}</span>
+      {best && <span className="absolute -top-2 right-2 rounded-full bg-accent px-1.5 py-px text-[9px] font-bold tracking-wider text-accent-fg shadow-sm">BEST</span>}
+    </button>
+  );
+}
+
 function SingleCard({ card }: { card: Card }) {
   const info = card.info!;
   const [descOpen, setDescOpen] = useState(false);
+  const video = useMemo(() => dedupe(info.video), [info.video]);
+  const audio = useMemo(() => dedupe(info.audio), [info.audio]);
+  const [tab, setTab] = useState<"video" | "audio">(info.video.length ? "video" : "audio");
+  const list = tab === "video" ? video.list : audio.list;
+  const [pickedLabel, setPickedLabel] = useState<string | null>(null);
+  const selected = list.find((o) => o.label === pickedLabel) ?? (tab === "video" ? video.best : audio.best) ?? list[0];
   const isDone = (o: MediaOption) => card.queued.has(o.label + o.kind);
+  const mp3 = info.audio.find((o) => o.extractAudio === "mp3");
+  const sharedExt = common(list, (o) => o.ext);
+  const sharedFps = common(list, (o) => o.fps);
+  const sharedCodecs = common(list, (o) => o.codecs);
+  const shared = [sharedExt, sharedCodecs, sharedFps ? `${sharedFps} fps` : null].filter(Boolean).join(" · ");
+
   return (
-    <div className="grid grid-cols-[230px_minmax(0,1fr)] gap-5">
-      <div className="min-w-0 space-y-2.5">
+    <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-5">
+      <div className="min-w-0">
         <Thumb src={info.thumbnail} duration={info.duration} live={info.isLive} />
-        <div className="line-clamp-3 text-[14px] font-semibold leading-snug" title={info.title}>
-          {info.title}
-        </div>
-        <div className="space-y-1">
-          <Meta label="Platform" value={info.platform} />
-          <Meta label="Duration" value={info.isLive ? "Live" : formatDuration(info.duration)} />
-          {info.uploader && <Meta label="Uploader" value={info.uploader} />}
-        </div>
         {info.playlistId && (
-          <Button size="sm" variant="default" className="w-full justify-center" onClick={() => useAnalyze.getState().analyze([info.url], true)}>
+          <Button size="sm" variant="ghost" className="mt-2 w-full justify-center" onClick={() => useAnalyze.getState().analyze([info.url], true)}>
             <ListVideo className="h-3.5 w-3.5" />
             Show the whole playlist
           </Button>
         )}
-        {info.description && (
-          <div>
-            <button className="text-[12px] text-muted hover:text-fg" onClick={() => setDescOpen(!descOpen)}>
-              {descOpen ? "▾" : "▸"} Description
-            </button>
-            {descOpen && <div className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-[11px] text-muted">{info.description}</div>}
-          </div>
-        )}
       </div>
-      <div className="min-w-0 space-y-4">
-        {info.video.length > 0 && (
-          <section>
-            <h3 className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold">
-              <Film className="h-4 w-4 text-accent" /> Video
-            </h3>
-            <table className="w-full table-fixed border-collapse">
-              <thead className="border-b border-line">
-                <tr>
-                  <Th w="w-[118px]">Quality</Th>
-                  <Th w="w-[62px]">Format</Th>
-                  <Th w="w-[92px]">Resolution</Th>
-                  <Th w="w-[44px]">FPS</Th>
-                  <Th>Codecs</Th>
-                  <Th w="w-[78px]">Size</Th>
-                  <th className="w-[116px]" />
-                </tr>
-              </thead>
-              <tbody>
-                {info.video.map((o) => (
-                  <tr key={o.label} className="border-b border-line/50 text-[12px] hover:bg-raised/40">
-                    <td className="truncate px-2 py-1.5 font-semibold" title={o.label}>{o.label}</td>
-                    <td className="px-2">{o.ext}</td>
-                    <td className="px-2 tabular-nums text-muted">{o.resolution ?? "—"}</td>
-                    <td className="px-2 tabular-nums text-muted">{o.fps ?? "—"}</td>
-                    <td className="truncate px-2 text-muted" title={o.codecs ?? undefined}>
-                      {o.codecs ?? "—"}
-                    </td>
-                    <td className="px-2 tabular-nums">{sizeText(o)}</td>
-                    <td className="py-1 text-right">
-                      <DownloadButton done={isDone(o)} onClick={() => void downloadOption(card, o)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
-        {info.audio.length > 0 && (
-          <section>
-            <h3 className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold">
-              <Music className="h-4 w-4 text-success" /> Audio
-            </h3>
-            <table className="w-full table-fixed border-collapse">
-              <thead className="border-b border-line">
-                <tr>
-                  <Th>Quality</Th>
-                  <Th>Format</Th>
-                  <Th>Codec</Th>
-                  <Th>Size</Th>
-                  <th className="w-[116px]" />
-                </tr>
-              </thead>
-              <tbody>
-                {info.audio.map((o) => (
-                  <tr key={o.label} className="border-b border-line/50 text-[12px] hover:bg-raised/40">
-                    <td className="truncate px-2 py-1.5 font-semibold" title={o.label}>{o.label}</td>
-                    <td className="px-2">{o.ext}</td>
-                    <td className="px-2 text-muted">{o.codecs ?? "—"}</td>
-                    <td className="px-2 tabular-nums">{sizeText(o)}</td>
-                    <td className="py-1 text-right">
-                      <DownloadButton done={isDone(o)} onClick={() => void downloadOption(card, o)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
+
+      <div className="flex min-w-0 flex-col gap-3">
+        <div>
+          <div className="line-clamp-2 text-[15px] font-semibold leading-snug" title={info.title}>
+            {info.title}
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+            <span className="flex items-center gap-1 rounded-full bg-raised px-2 py-0.5">
+              <MonitorPlay className="h-3 w-3" />
+              {info.platform}
+            </span>
+            {info.uploader && (
+              <span className="flex max-w-[220px] items-center gap-1 truncate rounded-full bg-raised px-2 py-0.5">
+                <User className="h-3 w-3 shrink-0" />
+                <span className="truncate">{info.uploader}</span>
+              </span>
+            )}
+            <span className="flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 tabular-nums">
+              <Clock className="h-3 w-3" />
+              {info.isLive ? "Live" : formatDuration(info.duration)}
+            </span>
+            {info.description && (
+              <button className="px-1 text-faint hover:text-fg" onClick={() => setDescOpen(!descOpen)}>
+                {descOpen ? "Hide description" : "Description"}
+              </button>
+            )}
+          </div>
+          {descOpen && <div className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-raised/50 p-2 text-[11px] text-muted">{info.description}</div>}
+        </div>
+
+        {/* Main action: the selected quality, plus one-click MP3. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {selected && (
+            <Button variant="primary" className="h-9 px-4" onClick={() => void downloadOption(card, selected)}>
+              {isDone(selected) ? <Check className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+              {isDone(selected) ? "Added · add again" : `Download ${shortLabel(selected)}`}
+              <span className="font-normal opacity-80">· {selected.ext}{selected.size ? ` · ${sizeText(selected)}` : ""}</span>
+            </Button>
+          )}
+          {mp3 && tab === "video" && (
+            <Button className="h-9" onClick={() => void downloadOption(card, mp3)} title="Audio only, converted to MP3">
+              {isDone(mp3) ? <Check className="h-4 w-4 text-success" /> : <Music className="h-4 w-4 text-success" />}
+              MP3{mp3.size ? <span className="text-muted">· {sizeText(mp3)}</span> : null}
+            </Button>
+          )}
+        </div>
+
+        {/* Quality picker */}
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <div className="inline-flex rounded-md border border-line bg-panel p-0.5">
+              {(["video", "audio"] as const).map((t) => {
+                const n = (t === "video" ? video.list : audio.list).length;
+                if (!n) return null;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => { setTab(t); setPickedLabel(null); }}
+                    className={cn("flex h-7 items-center gap-1.5 rounded px-2.5 text-[12px]", tab === t ? "bg-raised text-fg" : "text-muted hover:text-fg")}
+                  >
+                    {t === "video" ? <Film className="h-3.5 w-3.5" /> : <Music className="h-3.5 w-3.5" />}
+                    {t === "video" ? "Video" : "Audio"}
+                    <span className="text-faint">{n}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {shared && <span className="truncate text-[11px] text-faint" title={shared}>All {tab}: {shared}</span>}
+          </div>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2 pt-1">
+            {list.map((o) => (
+              <QualityTile
+                key={o.label + o.kind}
+                o={o}
+                best={o === (tab === "video" ? video.best : audio.best)}
+                selected={o === selected}
+                done={isDone(o)}
+                showExt={!sharedExt}
+                showFps={!sharedFps}
+                onSelect={() => setPickedLabel(o.label)}
+                onDownload={() => void downloadOption(card, o)}
+              />
+            ))}
+          </div>
+          <div className="mt-1.5 text-[11px] text-faint">Click a quality to choose it · double-click to download it straight away</div>
+        </div>
       </div>
     </div>
   );
@@ -285,10 +355,10 @@ function PlaylistCard({ card }: { card: Card }) {
 
 function AnalyzeCard({ card }: { card: Card }) {
   return (
-    <div className="rounded-xl border border-line bg-panel p-4 shadow-sm">
+    <div className="rounded-xl border border-line bg-panel p-4 shadow-pop">
       <div className="mb-3 flex items-center gap-2">
-        <button className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted underline-offset-2 hover:text-fg hover:underline" title="Open in the browser" onClick={() => void api.openUrl(card.url).catch(() => {})}>
-          <span className="truncate">{card.url}</span>
+        <button className="flex min-w-0 items-center gap-1.5 text-[11px] text-faint underline-offset-2 hover:text-fg hover:underline" title="Open in the browser" onClick={() => void api.openUrl(card.url).catch(() => {})}>
+          <span className="truncate">{displayUrl(card.url)}</span>
           <ExternalLink className="h-3 w-3 shrink-0" />
         </button>
         <div className="flex-1" />
