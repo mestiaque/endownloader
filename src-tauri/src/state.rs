@@ -93,11 +93,25 @@ pub fn migrate_from_endownloader(data_dir: &std::path::Path, portable: bool) {
     if !portable {
         if let Some(parent) = data_dir.parent() {
             let old = parent.join("com.mestiaque.endownloader");
-            if old.is_dir() && !data_dir.exists() {
-                match std::fs::rename(&old, data_dir) {
-                    Ok(()) => log::info!("moved ENDownloader data from {} to {}", old.display(), data_dir.display()),
-                    Err(e) => log::warn!("could not move ENDownloader data from {}: {e}", old.display()),
+            // Decide by the database, not the folder: the log plugin creates `<data>/logs`
+            // before this runs, so the new folder usually exists already on the first start.
+            if old.is_dir() && !data_dir.join("ensave.db").exists() {
+                let _ = std::fs::create_dir_all(data_dir);
+                let mut moved = 0;
+                if let Ok(entries) = std::fs::read_dir(&old) {
+                    for e in entries.flatten() {
+                        let to = data_dir.join(e.file_name());
+                        if to.exists() {
+                            continue; // e.g. the new logs folder
+                        }
+                        match std::fs::rename(e.path(), &to) {
+                            Ok(()) => moved += 1,
+                            Err(err) => log::warn!("could not move {}: {err}", e.path().display()),
+                        }
+                    }
                 }
+                let _ = std::fs::remove_dir(&old); // only succeeds when nothing is left
+                log::info!("moved {moved} item(s) of ENDownloader data from {} to {}", old.display(), data_dir.display());
             }
         }
     }
@@ -143,10 +157,13 @@ mod rename_tests {
         std::fs::create_dir_all(old.join("tools")).unwrap();
         std::fs::write(old.join("endownloader.db"), b"db").unwrap();
         std::fs::write(old.join("endownloader.db-wal"), b"wal").unwrap();
+        std::fs::create_dir_all(old.join("logs")).unwrap();
         let new = root.join("com.mestiaque.ensave");
+        // As in the real app: the log plugin has already created the new logs folder.
+        std::fs::create_dir_all(new.join("logs")).unwrap();
 
         migrate_from_endownloader(&new, false);
-        assert!(!old.exists());
+        assert!(!old.join("endownloader.db").exists());
         assert_eq!(std::fs::read(new.join("ensave.db")).unwrap(), b"db");
         assert_eq!(std::fs::read(new.join("ensave.db-wal")).unwrap(), b"wal");
         assert!(new.join("tools").is_dir());
