@@ -10,26 +10,30 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 pub const EV_TOOL: &str = "tool-status";
 
-/// Make sure yt-dlp is available, downloading the official release on first use.
-async fn ensure_yt_dlp(app: &AppHandle) -> Result<()> {
-    let state = app.state::<AppState>();
-    if state.tools.path(ToolKind::YtDlp).is_some() {
-        return Ok(());
-    }
-    let _guard = state.tool_install.lock().await;
-    if state.tools.path(ToolKind::YtDlp).is_some() {
-        return Ok(());
-    }
-    let _ = app.emit(EV_TOOL, serde_json::json!({ "id": "yt-dlp", "state": "installing" }));
-    let r = state.tools.install_yt_dlp().await;
-    let _ = app.emit(EV_TOOL, serde_json::json!({ "id": "yt-dlp", "state": if r.is_ok() { "installed" } else { "failed" } }));
-    r.map(|_| ())
+/// Install what media downloads need, or update an aging yt-dlp: shortly after start and
+/// then once a day while the app runs. Nothing to do for the user; failures are only logged.
+pub fn keep_tools_ready(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        loop {
+            let tools = app.state::<AppState>().tools.clone();
+            match tools.ensure_media_tools(true).await {
+                Ok(done) => {
+                    for id in done {
+                        let _ = app.emit(EV_TOOL, serde_json::json!({ "id": id, "state": "installed" }));
+                    }
+                }
+                Err(e) => log::warn!("could not prepare media tools: {e}"),
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(24 * 3600)).await;
+        }
+    });
 }
 
 /// Read title, thumbnail and the available formats of a media link.
 #[tauri::command]
 pub async fn analyze_url(app: AppHandle, url: String, playlist: Option<bool>) -> Result<MediaInfo> {
-    ensure_yt_dlp(&app).await?;
     let state = app.state::<AppState>();
     let prefs = MediaPrefs { cookies_browser: state.settings.read().cookies_browser.clone() };
     let tools = state.tools.clone();
@@ -54,17 +58,11 @@ pub async fn tools_status(state: State<'_, AppState>) -> Result<Vec<ToolInfo>> {
     Ok(out)
 }
 
-/// Install or update a tool the app manages (yt-dlp).
+/// Install or update a tool the app manages (yt-dlp, Deno; FFmpeg on Windows).
 #[tauri::command]
 pub async fn install_tool(app: AppHandle, id: String) -> Result<ToolInfo> {
     let kind = ToolKind::parse(&id).ok_or_else(|| DlError::Other(format!("unknown tool {id}")))?;
-    if kind != ToolKind::YtDlp {
-        return Err(DlError::Other(format!("{id} is installed with your system's package manager")));
-    }
-    let state = app.state::<AppState>();
-    {
-        let _guard = state.tool_install.lock().await;
-        state.tools.install_yt_dlp().await?;
-    }
-    Ok(state.tools.info(kind).await)
+    let tools = app.state::<AppState>().tools.clone();
+    tools.install(kind).await?;
+    Ok(tools.info(kind).await)
 }

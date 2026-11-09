@@ -25,7 +25,7 @@ pub enum DlError {
     Drm,
     #[error("Not enough disk space")]
     DiskFull,
-    #[error("{0} is missing. Open Settings → Tools to install it")]
+    #[error("{0} is missing and could not be downloaded automatically. Check your internet connection, or see Settings → Tools")]
     ToolMissing(String),
     #[error("{0} is outdated. Open Settings → Tools to update it")]
     ToolOutdated(String),

@@ -96,6 +96,7 @@ pub fn run() {
             }
             app.manage(state);
             tauri::async_runtime::spawn(scheduler.run());
+            commands::media::keep_tools_ready(app.handle());
             tray::install(app.handle())?;
             tray::fit_to_monitor(app.handle());
             if !hidden {

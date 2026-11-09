@@ -19,8 +19,6 @@ pub struct AppState {
     pub aria2_path: Option<PathBuf>,
     /// yt-dlp, FFmpeg, JS runtime, gallery-dl.
     pub tools: Tools,
-    /// Serializes tool installs (two analyses must not download yt-dlp twice).
-    pub tool_install: tokio::sync::Mutex<()>,
     pub settings: RwLock<Settings>,
     /// Command-line request from this launch, taken once by the UI when it is ready.
     pub launch: Mutex<Option<CliRequest>>,
@@ -62,7 +60,6 @@ impl AppState {
             queue,
             aria2_path,
             tools,
-            tool_install: tokio::sync::Mutex::new(()),
             settings: RwLock::new(settings),
             launch: Mutex::new(None),
             quitting: AtomicBool::new(false),

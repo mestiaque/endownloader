@@ -3,8 +3,11 @@
 //! and can update), then on PATH and in the usual per-user folders (a desktop launcher's
 //! PATH often lacks `~/.local/bin`).
 //!
-//! yt-dlp is the only tool the app downloads itself: the official release binary, checked
-//! against the release's SHA2-256SUMS before it is used.
+//! The app downloads what media downloads need when it is missing, so users never have to
+//! install anything by hand (`ensure_media_tools`): the official yt-dlp release (kept up to
+//! date, since sites break old versions), Deno as yt-dlp's JavaScript runtime when neither
+//! Deno nor Node.js is present, and on Windows FFmpeg (yt-dlp's FFmpeg build). Every download
+//! is checked against the SHA-256 its publisher lists before anything is installed.
 
 use crate::error::DlError;
 use serde::Serialize;
@@ -72,7 +75,10 @@ pub struct ToolInfo {
 pub struct Tools {
     /// `<app data>/tools`
     pub dir: PathBuf,
+    /// One install at a time (the startup check and a first download can race).
+    lock: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
+
 
 fn home() -> Option<PathBuf> {
     std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from)
@@ -80,7 +86,7 @@ fn home() -> Option<PathBuf> {
 
 impl Tools {
     pub fn new(dir: PathBuf) -> Self {
-        Self { dir }
+        Self { dir, lock: Default::default() }
     }
 
     fn managed_path(&self, kind: ToolKind) -> PathBuf {
@@ -154,7 +160,7 @@ impl Tools {
             path: found.as_ref().map(|(p, _)| p.display().to_string()),
             version: if found.is_some() { self.version(kind).await } else { None },
             managed: found.is_some_and(|(_, m)| m),
-            installable: kind == ToolKind::YtDlp,
+            installable: kind == ToolKind::YtDlp || kind == ToolKind::Deno || (kind == ToolKind::Ffmpeg && cfg!(windows)),
         }
     }
 
@@ -170,19 +176,88 @@ impl Tools {
         Vec::new()
     }
 
+    /// Install or update a tool the app manages. Returns the installed version.
+    pub async fn install(&self, kind: ToolKind) -> Result<String, DlError> {
+        let _guard = self.lock.lock().await;
+        match kind {
+            ToolKind::YtDlp => self.install_yt_dlp_locked().await,
+            ToolKind::Deno => self.install_deno_locked().await,
+            ToolKind::Ffmpeg if cfg!(windows) => self.install_ffmpeg_locked().await,
+            _ => Err(DlError::Other(format!("{} is installed with your system's package manager", kind.id()))),
+        }
+    }
+
+    /// Make sure everything a media download needs is there, installing what is missing
+    /// (and, when `update` is set, replacing a managed yt-dlp that is not the latest release). Returns the
+    /// tools it installed. yt-dlp is required; a failed JS runtime or FFmpeg install is only
+    /// logged here, because the download itself reports what is missing more precisely.
+    pub async fn ensure_media_tools(&self, update: bool) -> Result<Vec<&'static str>, DlError> {
+        let mut done = Vec::new();
+        match self.find(ToolKind::YtDlp) {
+            None => {
+                self.install_once(ToolKind::YtDlp).await?;
+                done.push("yt-dlp");
+            }
+            Some((path, true)) if update => match self.yt_dlp_is_latest(&path).await {
+                Ok(true) => {}
+                Ok(false) => match self.install(ToolKind::YtDlp).await {
+                    Ok(v) => {
+                        log::info!("yt-dlp updated to {v}");
+                        done.push("yt-dlp");
+                    }
+                    Err(e) => log::warn!("yt-dlp update failed: {e}"),
+                },
+                Err(e) => log::warn!("could not check for a yt-dlp update: {e}"),
+            },
+            _ => {}
+        }
+        if self.path(ToolKind::Deno).is_none() && self.path(ToolKind::Node).is_none() {
+            match self.install_once(ToolKind::Deno).await {
+                Ok(()) => done.push("deno"),
+                Err(e) => log::warn!("Deno install failed: {e}"),
+            }
+        }
+        if cfg!(windows) && self.path(ToolKind::Ffmpeg).is_none() {
+            match self.install_once(ToolKind::Ffmpeg).await {
+                Ok(()) => done.push("ffmpeg"),
+                Err(e) => log::warn!("FFmpeg install failed: {e}"),
+            }
+        }
+        Ok(done)
+    }
+
+    /// The managed yt-dlp is byte-identical to the latest release (only the small checksum
+    /// list is downloaded to find out).
+    async fn yt_dlp_is_latest(&self, path: &Path) -> Result<bool, DlError> {
+        let sums = get_text(&http_client()?, &format!("{YT_DLP_BASE}/SHA2-256SUMS")).await?;
+        let latest = checksum_for(&sums, yt_dlp_asset()).ok_or_else(|| DlError::Other("no yt-dlp checksum published".into()))?;
+        let local = hex(&Sha256::digest(std::fs::read(path)?));
+        Ok(local.eq_ignore_ascii_case(&latest))
+    }
+
+    /// Install unless another caller installed it while we waited for the lock.
+    async fn install_once(&self, kind: ToolKind) -> Result<(), DlError> {
+        let _guard = self.lock.lock().await;
+        if self.path(kind).is_some() {
+            return Ok(());
+        }
+        match kind {
+            ToolKind::YtDlp => self.install_yt_dlp_locked().await,
+            ToolKind::Deno => self.install_deno_locked().await,
+            _ => self.install_ffmpeg_locked().await,
+        }
+        .map(|_| ())
+    }
+
     /// Download the latest official yt-dlp release into the tools folder (replacing an
     /// older managed copy). Returns the new version.
     pub async fn install_yt_dlp(&self) -> Result<String, DlError> {
-        let asset = if cfg!(windows) {
-            "yt-dlp.exe"
-        } else if cfg!(target_os = "macos") {
-            "yt-dlp_macos"
-        } else if cfg!(target_arch = "aarch64") {
-            "yt-dlp_linux_aarch64"
-        } else {
-            "yt-dlp_linux"
-        };
-        let base = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
+        self.install(ToolKind::YtDlp).await
+    }
+
+    async fn install_yt_dlp_locked(&self) -> Result<String, DlError> {
+        let asset = yt_dlp_asset();
+        let base = YT_DLP_BASE;
         let http = http_client()?;
         let sums = get_text(&http, &format!("{base}/SHA2-256SUMS")).await?;
         let expected = checksum_for(&sums, asset).ok_or_else(|| DlError::Other(format!("no checksum published for {asset}")))?;
@@ -201,6 +276,21 @@ impl Tools {
         let v = self.version(ToolKind::YtDlp).await.unwrap_or_else(|| "installed".into());
         log::info!("yt-dlp {v} installed at {}", dest.display());
         Ok(v)
+    }
+}
+
+const YT_DLP_BASE: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
+
+/// The official standalone yt-dlp for this platform (it carries its own Python).
+fn yt_dlp_asset() -> &'static str {
+    if cfg!(windows) {
+        "yt-dlp.exe"
+    } else if cfg!(target_os = "macos") {
+        "yt-dlp_macos"
+    } else if cfg!(target_arch = "aarch64") {
+        "yt-dlp_linux_aarch64"
+    } else {
+        "yt-dlp_linux"
     }
 }
 
@@ -227,6 +317,103 @@ pub fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 
 pub fn today_days() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| (d.as_secs() / 86_400) as i64).unwrap_or(0)
+}
+
+impl Tools {
+    /// Official Deno release for this platform (a zip holding one executable).
+    async fn install_deno_locked(&self) -> Result<String, DlError> {
+        let triple = if cfg!(windows) {
+            "x86_64-pc-windows-msvc"
+        } else if cfg!(target_os = "macos") {
+            if cfg!(target_arch = "aarch64") { "aarch64-apple-darwin" } else { "x86_64-apple-darwin" }
+        } else if cfg!(target_arch = "aarch64") {
+            "aarch64-unknown-linux-gnu"
+        } else {
+            "x86_64-unknown-linux-gnu"
+        };
+        let asset = format!("deno-{triple}.zip");
+        let base = "https://github.com/denoland/deno/releases/latest/download";
+        let http = http_client()?;
+        let sums = get_text(&http, &format!("{base}/{asset}.sha256sum")).await?;
+        let expected = sha256_in(&sums).ok_or_else(|| DlError::Other(format!("no checksum published for {asset}")))?;
+        log::info!("downloading Deno ({asset})");
+        let zip = verified(get_bytes(&http, &format!("{base}/{asset}")).await?, &expected, "Deno")?;
+        let exe = ToolKind::Deno.exe();
+        std::fs::create_dir_all(&self.dir)?;
+        let n = extract_zip(&zip, &self.dir, |name| (name == exe).then(|| exe.clone()))?;
+        if n == 0 {
+            return Err(DlError::Other("the Deno download did not contain the program".into()));
+        }
+        make_executable(&self.managed_path(ToolKind::Deno))?;
+        let v = self.version(ToolKind::Deno).await.unwrap_or_else(|| "installed".into());
+        log::info!("Deno {v} installed in {}", self.dir.display());
+        Ok(v)
+    }
+
+    /// yt-dlp's own FFmpeg build for Windows (the shared one: about half the download).
+    /// Its bin folder (ffmpeg, ffprobe and their DLLs) goes into the tools folder.
+    async fn install_ffmpeg_locked(&self) -> Result<String, DlError> {
+        let asset = "ffmpeg-master-latest-win64-gpl-shared.zip";
+        let base = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest";
+        let http = http_client()?;
+        let sums = get_text(&http, &format!("{base}/checksums.sha256")).await?;
+        let expected = checksum_for(&sums, asset).ok_or_else(|| DlError::Other(format!("no checksum published for {asset}")))?;
+        log::info!("downloading FFmpeg ({asset})");
+        let zip = verified(get_bytes(&http, &format!("{base}/{asset}")).await?, &expected, "FFmpeg")?;
+        std::fs::create_dir_all(&self.dir)?;
+        let n = extract_zip(&zip, &self.dir, |name| {
+            let (dir, file) = name.rsplit_once('/')?;
+            (dir.ends_with("/bin") && !file.is_empty()).then(|| file.to_string())
+        })?;
+        if !self.managed_path(ToolKind::Ffmpeg).is_file() {
+            return Err(DlError::Other(format!("the FFmpeg download did not contain ffmpeg ({n} files)")));
+        }
+        let v = self.version(ToolKind::Ffmpeg).await.unwrap_or_else(|| "installed".into());
+        log::info!("FFmpeg {v} installed in {}", self.dir.display());
+        Ok(v)
+    }
+}
+
+/// Check a download against its published SHA-256.
+fn verified(bytes: Vec<u8>, expected: &str, what: &str) -> Result<Vec<u8>, DlError> {
+    if hex(&Sha256::digest(&bytes)).eq_ignore_ascii_case(expected) {
+        Ok(bytes)
+    } else {
+        Err(DlError::Other(format!("the downloaded {what} failed its checksum check; nothing was installed")))
+    }
+}
+
+/// Write the zip entries `pick` maps to a file name into `dir` (each through a temporary
+/// file, so a half-written program is never left behind). Returns how many were written.
+fn extract_zip(zip: &[u8], dir: &Path, pick: impl Fn(&str) -> Option<String>) -> Result<usize, DlError> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip)).map_err(|e| DlError::Other(format!("bad archive: {e}")))?;
+    let mut n = 0;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(|e| DlError::Other(format!("bad archive: {e}")))?;
+        if !entry.is_file() {
+            continue;
+        }
+        let Some(name) = pick(entry.name()) else { continue };
+        // Only plain file names: nothing from the archive may point outside `dir`.
+        if name.is_empty() || name.contains(['/', '\\']) || name == ".." {
+            continue;
+        }
+        let dest = dir.join(&name);
+        let tmp = dir.join(format!("{name}.download"));
+        let mut out = std::fs::File::create(&tmp)?;
+        std::io::copy(&mut entry, &mut out)?;
+        drop(out);
+        make_executable(&tmp)?;
+        std::fs::rename(&tmp, &dest)?;
+        n += 1;
+    }
+    Ok(n)
+}
+
+/// The SHA-256 in a single-file checksum file: `<hash>  <name>` (Linux) or PowerShell's
+/// `Hash : <HASH>` listing (Deno's Windows assets).
+fn sha256_in(text: &str) -> Option<String> {
+    text.split(|c: char| !c.is_ascii_hexdigit()).find(|w| w.len() == 64).map(str::to_ascii_lowercase)
 }
 
 fn checksum_for(sums: &str, asset: &str) -> Option<String> {
@@ -301,6 +488,40 @@ mod tests {
         assert_eq!(yt_dlp_age_days("2026.10.26", today), Some(14));
         assert_eq!(yt_dlp_age_days("2026.08.19", today), Some(82));
         assert_eq!(yt_dlp_age_days("nightly", today), None);
+    }
+
+    #[test]
+    fn single_file_checksums() {
+        let h = "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609";
+        assert_eq!(sha256_in(&format!("{h}  deno-x86_64-unknown-linux-gnu.zip\n")).as_deref(), Some(h));
+        let ps = format!("\nAlgorithm : SHA256\nHash      : {}\nPath      : C:\\a\\deno.zip\n", h.to_uppercase());
+        assert_eq!(sha256_in(&ps).as_deref(), Some(h));
+        assert_eq!(sha256_in("404: Not Found"), None);
+    }
+
+    #[test]
+    fn zip_extraction_stays_in_the_folder() {
+        use std::io::Write;
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            let mut w = zip::ZipWriter::new(&mut buf);
+            let o = zip::write::SimpleFileOptions::default();
+            for (name, body) in [("pkg/bin/ffmpeg.exe", "ff"), ("pkg/bin/avcodec.dll", "dll"), ("pkg/doc/README.txt", "doc"), ("pkg/bin/../../evil", "x")] {
+                w.start_file(name, o).unwrap();
+                w.write_all(body.as_bytes()).unwrap();
+            }
+            w.finish().unwrap();
+        }
+        let d = tempfile::tempdir().unwrap();
+        let n = extract_zip(buf.get_ref(), d.path(), |name| {
+            let (dir, file) = name.rsplit_once('/')?;
+            (dir.ends_with("/bin") && !file.is_empty()).then(|| file.to_string())
+        })
+        .unwrap();
+        assert_eq!(n, 2);
+        assert_eq!(std::fs::read_to_string(d.path().join("ffmpeg.exe")).unwrap(), "ff");
+        assert!(d.path().join("avcodec.dll").is_file());
+        assert!(!d.path().join("README.txt").exists() && !d.path().join("evil").exists());
     }
 
     #[test]

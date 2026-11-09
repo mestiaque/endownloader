@@ -186,3 +186,20 @@ async fn youtube_unavailable_video_is_typed_error() {
     eprintln!("unavailable video: {err:?} / {err}");
     assert_eq!(err, endl_core::error::DlError::Removed);
 }
+
+/// Fresh install: the app fetches yt-dlp and Deno itself (checksum-verified) and both run.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn installs_yt_dlp_and_deno() {
+    let dir = tempfile::tempdir().unwrap();
+    let t = Tools::new(dir.path().to_path_buf());
+    let v = t.install(ToolKind::YtDlp).await.expect("yt-dlp install");
+    eprintln!("yt-dlp {v}");
+    assert!(endl_core::tools::yt_dlp_age_days(&v, endl_core::tools::today_days()).is_some(), "{v}");
+    let d = t.install(ToolKind::Deno).await.expect("deno install");
+    eprintln!("deno {d}");
+    assert!(d.chars().next().is_some_and(|c| c.is_ascii_digit()), "{d}");
+    assert_eq!(t.find(ToolKind::Deno).map(|(_, managed)| managed), Some(true));
+    // Already there and fresh: nothing to do.
+    assert_eq!(t.ensure_media_tools(true).await.unwrap(), Vec::<&str>::new());
+}

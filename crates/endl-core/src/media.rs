@@ -499,6 +499,7 @@ fn yt_dlp_age(tools: &Tools, version: Option<&str>) -> Option<i64> {
 /// Analyse a link: `yt-dlp -J`. `playlist` = list every entry of a playlist/channel
 /// (flat, fast) instead of the single video.
 pub async fn analyze(tools: &Tools, prefs: &MediaPrefs, link: &str, playlist: bool) -> Result<MediaInfo, DlError> {
+    tools.ensure_media_tools(false).await?;
     let ytdlp = tools.path(ToolKind::YtDlp).ok_or_else(|| DlError::ToolMissing("yt-dlp".into()))?;
     let mut args = common_args(tools, prefs);
     args.extend(["-J".into(), "--no-warnings".into()]);
@@ -681,6 +682,8 @@ impl Engine for MediaEngine {
     }
 
     async fn start(&self, spec: TaskSpec, events: mpsc::Sender<EngineEvent>) -> Result<EngineRef, DlError> {
+        // First media download on a fresh install (command line, playlist): fetch yt-dlp & co.
+        self.tools.ensure_media_tools(false).await?;
         let ytdlp = self.tools.path(ToolKind::YtDlp).ok_or_else(|| DlError::ToolMissing("yt-dlp".into()))?;
         let opt = |k: &str| spec.options.get(k).and_then(Value::as_str).map(str::to_string).filter(|v| !v.is_empty());
         let format = opt("format").unwrap_or_else(|| "bv*+ba/b".into());

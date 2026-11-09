@@ -375,10 +375,16 @@ function MediaSection() {
   );
 }
 
+const IS_WINDOWS = navigator.userAgent.includes("Windows");
+
 const TOOL_TEXT: Record<ToolInfo["id"], { name: string; what: string; missing: string }> = {
-  "yt-dlp": { name: "yt-dlp", what: "Reads media sites and downloads video and audio", missing: "Downloaded automatically the first time you add a media link" },
-  ffmpeg: { name: "FFmpeg", what: "Joins video and audio, converts to MP3", missing: "Install it with: sudo apt install ffmpeg" },
-  deno: { name: "Deno", what: "JavaScript runtime yt-dlp uses for YouTube (preferred)", missing: "Optional — Node.js is used when Deno is not installed" },
+  "yt-dlp": { name: "yt-dlp", what: "Reads media sites and downloads video and audio; kept up to date automatically", missing: "Downloaded automatically when you are online" },
+  ffmpeg: {
+    name: "FFmpeg",
+    what: "Joins video and audio, converts to MP3",
+    missing: IS_WINDOWS ? "Downloaded automatically when you are online" : "Install it with: sudo apt install ffmpeg",
+  },
+  deno: { name: "Deno", what: "JavaScript runtime yt-dlp uses for YouTube (preferred)", missing: "Downloaded automatically when Node.js is not installed either" },
   node: { name: "Node.js", what: "JavaScript runtime yt-dlp can use for YouTube", missing: "Optional — without Deno or Node.js some YouTube formats may be missing" },
   "gallery-dl": { name: "gallery-dl", what: "Image galleries and photo posts", missing: "Optional — install it to download image galleries" },
 };
