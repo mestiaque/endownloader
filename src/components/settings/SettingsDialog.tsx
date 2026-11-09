@@ -4,14 +4,14 @@ import { Check, Copy, FolderOpen, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { cn } from "../../lib/format";
-import type { AppPaths, Category, Settings, ToolInfo } from "../../lib/types";
+import type { Category, Settings, ToolInfo } from "../../lib/types";
 import { useSettings } from "../../store/settings";
 import { confirmDialog, toast, useUi } from "../../store/ui";
 import { Dialog } from "../ui/overlays";
 import { Button, Input, Select, Switch } from "../ui/primitives";
 import { CategoryIcon } from "../tasks/categoryIcon";
-import appIcon from "../../assets/endownloader-icon.svg";
 import { useUpdate } from "../../store/update";
+import { AboutSection } from "./AboutSection";
 
 const SECTIONS = [
   ["general", "General"],
@@ -514,60 +514,6 @@ function LogsSection() {
   );
 }
 
-function AboutSection() {
-  const [version, setVersion] = useState("");
-  const [paths, setPaths] = useState<AppPaths | null>(null);
-  useEffect(() => {
-    getVersion().then(setVersion, () => {});
-    api.appPaths().then(setPaths, () => {});
-  }, []);
-  return (
-    <div className="space-y-2 py-3 text-[13px]">
-      <div className="flex items-center gap-3.5 pb-2">
-        <img src={appIcon} alt="" className="h-16 w-16" draggable={false} />
-        <div>
-          <div className="text-lg font-semibold">ENDownloader {version}</div>
-          <div className="text-muted">A fast download manager for files and media.</div>
-        </div>
-      </div>
-      <div className="pt-2 text-[12px] text-faint">Settings, queue and history: {paths?.data}{paths?.portable ? " (portable)" : ""}</div>
-      <div className="text-[12px] text-faint">Logs: {paths?.logs}</div>
-      <div className="pt-4 text-[11px] font-semibold uppercase tracking-wider text-faint">Developer</div>
-      <div className="divide-y divide-line rounded-lg bg-raised px-3">
-        <div className="flex items-center justify-between py-2.5">
-          <span>Developed by</span>
-          <span className="text-muted">M. Estiaque Ahmed Khan</span>
-        </div>
-        <div className="flex items-center justify-between py-2.5">
-          <span>
-            Contact
-            <span className="block text-[11px] text-faint">Bug reports, ideas and feedback are welcome</span>
-          </span>
-          <button className="text-accent hover:underline" onClick={() => api.openUrl("mailto:info@mestiaque.com").catch(() => toast({ kind: "error", title: "No mail app found", detail: "info@mestiaque.com" }))}>
-            info@mestiaque.com
-          </button>
-        </div>
-        <div className="flex items-center justify-between py-2.5">
-          <span>Website</span>
-          <button className="text-accent hover:underline" onClick={() => void api.openUrl("https://mestiaque.com").catch(() => {})}>
-            mestiaque.com
-          </button>
-        </div>
-        <div className="flex items-center justify-between py-2.5">
-          <span>
-            Also by the developer
-            <span className="block text-[11px] text-faint">The matching image viewer and video player</span>
-          </span>
-          <span className="text-muted">ENViewer · ENPlayer</span>
-        </div>
-        <div className="flex items-center justify-between py-2.5">
-          <span>Copyright</span>
-          <span className="text-muted">© 2026 M. Estiaque Ahmed Khan · MIT</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function SettingsDialog() {
   const open = useUi((s) => s.dialog === "settings");

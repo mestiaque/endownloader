@@ -140,6 +140,7 @@ pub fn run() {
             system::app_paths,
             system::read_logs,
             system::diagnostics,
+            system::about_info,
             system::open_path,
             system::reveal_path,
             system::open_url,

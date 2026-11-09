@@ -50,6 +50,7 @@ export const api = {
   appPaths: () => invoke<AppPaths>("app_paths"),
   readLogs: (maxLines = 500) => invoke<string>("read_logs", { maxLines }),
   diagnostics: () => invoke<string>("diagnostics"),
+  aboutInfo: () => invoke<{ build: string; tauriVersion: string; webviewVersion: string; platform: string; arch: string }>("about_info"),
   openPath: (path: string) => invoke<void>("open_path", { path }),
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),

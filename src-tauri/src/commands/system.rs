@@ -154,3 +154,27 @@ pub fn hide_to_tray(app: AppHandle) {
         let _ = w.hide();
     }
 }
+
+/// Build and runtime facts for Settings → About.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AboutInfo {
+    /// "debug" | "release"
+    pub build: String,
+    pub tauri_version: String,
+    /// WebKitGTK on Linux, WebView2 on Windows; empty when it cannot be read.
+    pub webview_version: String,
+    pub platform: String,
+    pub arch: String,
+}
+
+#[tauri::command]
+pub fn about_info() -> AboutInfo {
+    AboutInfo {
+        build: if cfg!(debug_assertions) { "debug" } else { "release" }.into(),
+        tauri_version: tauri::VERSION.into(),
+        webview_version: tauri::webview_version().unwrap_or_default(),
+        platform: std::env::consts::OS.into(),
+        arch: std::env::consts::ARCH.into(),
+    }
+}
