@@ -11,6 +11,7 @@ import { Dialog } from "../ui/overlays";
 import { Button, Input, Select, Switch } from "../ui/primitives";
 import { CategoryIcon } from "../tasks/categoryIcon";
 import appIcon from "../../assets/endownloader-icon.svg";
+import { useUpdate } from "../../store/update";
 
 const SECTIONS = [
   ["general", "General"],
@@ -99,6 +100,23 @@ async function chooseFolder(title: string): Promise<string | null> {
   return typeof d === "string" ? d : null;
 }
 
+function UpdateRow() {
+  const check = useUpdate((u) => u.check);
+  const checking = useUpdate((u) => u.checking);
+  const [status, setStatus] = useState("");
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    getVersion().then(setVersion, () => {});
+  }, []);
+  return (
+    <Field label="Updates" hint={status || `You have version ${version}`}>
+      <Button size="sm" disabled={checking} onClick={async () => setStatus(await check(true))}>
+        {checking ? "Checking…" : "Check now"}
+      </Button>
+    </Field>
+  );
+}
+
 function GeneralSection() {
   const replace = useSettings((s) => s.replace);
   return (
@@ -107,6 +125,8 @@ function GeneralSection() {
       <Toggle k="startMinimized" label="Start minimized to the tray" />
       <Toggle k="closeToTray" label="Keep running in the tray when the window is closed" hint="Downloads continue in the background. Quit from the tray menu" />
       <Toggle k="confirmRemove" label="Confirm before removing downloads from the list" />
+      <Toggle k="checkUpdates" label="Check for updates automatically" hint="Looks for a new ENDownloader release on GitHub once a day" />
+      <UpdateRow />
       <Field label="Settings file" hint="Move your settings to another computer">
         <div className="flex gap-2">
           <Button

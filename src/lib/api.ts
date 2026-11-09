@@ -9,6 +9,18 @@ export interface MediaItem {
   mediaId?: string | null;
 }
 
+/** A newer release on GitHub (see src-tauri/src/commands/update.rs). */
+export interface UpdateInfo {
+  version: string;
+  notes: string;
+  page: string;
+  assetName: string;
+  url: string;
+  size: number;
+  sha256: string;
+  installable: boolean;
+}
+
 export type TaskAction = "pause" | "resume" | "cancel" | "retry";
 
 export const api = {
@@ -44,6 +56,11 @@ export const api = {
   openLogFolder: () => invoke<void>("open_log_folder"),
   quitApp: () => invoke<void>("quit_app"),
   hideToTray: () => invoke<void>("hide_to_tray"),
+
+  checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
+  installUpdate: (info: UpdateInfo) => invoke<"restart" | "exiting">("install_update", { info }),
+  restartApp: () => invoke<void>("restart_app"),
+  openReleasePage: () => invoke<void>("open_release_page"),
 };
 
 /** Commands reject with `{ kind, message }` (DlError) or a plain string. */

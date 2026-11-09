@@ -43,6 +43,8 @@ pub struct Settings {
     pub close_to_tray: bool,
     pub confirm_remove: bool,
     pub notify_on_finish: bool,
+    /// Look for a new release on GitHub about once a day.
+    pub check_updates: bool,
     // Downloads
     /// Empty = the system Downloads folder.
     pub download_dir: String,
@@ -80,6 +82,7 @@ impl Default for Settings {
             close_to_tray: true,
             confirm_remove: true,
             notify_on_finish: true,
+            check_updates: true,
             download_dir: String::new(),
             max_parallel: 3,
             connections: 8,

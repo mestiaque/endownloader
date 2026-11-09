@@ -15,6 +15,27 @@ table) and download the chosen format; playlists can be downloaded in bulk. How 
 aria2: on Ubuntu the `.deb` depends on the `aria2` package; Windows bundles the official
 `aria2c.exe` (fetched with a checksum check by `scripts/fetch-sidecars.sh`).
 
+## Install
+
+Download from [Releases](https://github.com/mestiaque/endownloader/releases/latest):
+
+| System | File | Notes |
+|---|---|---|
+| Ubuntu 22.04+ | `ENDownloader_<version>_amd64.deb` | `sudo apt install ./ENDownloader_*_amd64.deb` (pulls in `aria2` and `ffmpeg`) |
+| Any Linux | `ENDownloader_<version>_amd64.AppImage` | `chmod +x` and run; install `aria2` and `ffmpeg` yourself |
+| Windows 10/11 | `ENDownloader_<version>_x64-setup.exe` | Installer, no admin rights needed; aria2 included |
+| Windows (no install) | `ENDownloader-portable-windows-x64.zip` | Unzip anywhere; settings stay in the `data` folder next to it |
+
+yt-dlp is installed from inside the app (Settings → Tools), with a checksum check.
+
+**Updates.** ENDownloader asks GitHub for a newer release about once a day (Settings → General →
+*Check for updates automatically*, or *Check now*). The `.deb`, AppImage and Windows installer
+update themselves in place; the portable zip and development builds open the download page instead.
+
+**Releasing.** Bump the version in `package.json`, `Cargo.toml` (workspace) and
+`src-tauri/tauri.conf.json`, then push a tag `vX.Y.Z`. The `build` workflow tests, bundles both
+platforms and publishes the release that installed copies pick up.
+
 ## Quick start (development)
 
 ```bash

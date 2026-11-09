@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: Settings = {
   closeToTray: true,
   confirmRemove: true,
   notifyOnFinish: true,
+  checkUpdates: true,
   downloadDir: "",
   maxParallel: 3,
   connections: 8,

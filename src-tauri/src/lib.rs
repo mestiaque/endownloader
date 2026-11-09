@@ -3,7 +3,7 @@ mod queue;
 mod state;
 mod tray;
 
-use commands::{media, settings, system, tasks};
+use commands::{media, settings, system, tasks, update};
 use endl_core::cli::{parse_args, CliRequest};
 use endl_core::mask::mask_secrets;
 use state::AppState;
@@ -145,6 +145,10 @@ pub fn run() {
             system::open_log_folder,
             system::quit_app,
             system::hide_to_tray,
+            update::check_update,
+            update::install_update,
+            update::restart_app,
+            update::open_release_page,
         ])
         .build(tauri::generate_context!());
     match result {

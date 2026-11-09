@@ -2,6 +2,8 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { listen } from "@tauri-apps/api/event";
 import { Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { UpdateDialog } from "./components/update/UpdateDialog";
+import { scheduleUpdateCheck } from "./store/update";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
 import { Toolbar } from "./components/layout/Toolbar";
@@ -166,6 +168,8 @@ export default function App() {
   useTheme();
   useKeys();
   const dropping = useDropLinks();
+  const checkUpdates = useSettings((s) => s.settings.checkUpdates);
+  useEffect(() => (ready ? scheduleUpdateCheck(checkUpdates) : undefined), [ready, checkUpdates]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -218,6 +222,7 @@ export default function App() {
       )}
       <SettingsDialog />
       <ShortcutsDialog />
+      <UpdateDialog />
       <ConfirmHost />
       <PromptHost />
       <Toaster />

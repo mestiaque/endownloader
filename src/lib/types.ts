@@ -98,6 +98,7 @@ export interface Settings {
   closeToTray: boolean;
   confirmRemove: boolean;
   notifyOnFinish: boolean;
+  checkUpdates: boolean;
   downloadDir: string;
   maxParallel: number;
   connections: number;
