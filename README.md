@@ -15,6 +15,10 @@ table) and download the chosen format; playlists can be downloaded in bulk. How 
 aria2: on Ubuntu the `.deb` depends on the `aria2` package; Windows bundles the official
 `aria2c.exe` (fetched with a checksum check by `scripts/fetch-sidecars.sh`).
 
+![ENDownloader](docs/screenshots/01-downloads.png)
+
+How to use it: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
+
 ## Install
 
 Download from [Releases](https://github.com/mestiaque/endownloader/releases/latest):
@@ -26,7 +30,8 @@ Download from [Releases](https://github.com/mestiaque/endownloader/releases/late
 | Windows 10/11 | `ENDownloader_<version>_x64-setup.exe` | Installer, no admin rights needed; aria2 included |
 | Windows (no install) | `ENDownloader-portable-windows-x64.zip` | Unzip anywhere; settings stay in the `data` folder next to it |
 
-yt-dlp is installed from inside the app (Settings → Tools), with a checksum check.
+Nothing else to install: yt-dlp (kept up to date), Deno and, on Windows, FFmpeg are downloaded
+automatically when first needed, each checked against its published SHA-256.
 
 **Updates.** ENDownloader asks GitHub for a newer release about once a day (Settings → General →
 *Check for updates automatically*, or *Check now*). The `.deb`, AppImage and Windows installer
