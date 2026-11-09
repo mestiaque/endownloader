@@ -80,7 +80,19 @@ async fn youtube_analyze_and_download_with_pause() {
     assert_eq!(status(&db).status, TaskStatus::Paused);
     let parts: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name()).collect();
     eprintln!("files while paused: {parts:?}");
-    assert!(parts.iter().any(|n| n.to_string_lossy().ends_with(".part")), "partial data kept");
+    let finished_before: u64 = parts
+        .iter()
+        .filter(|n| !n.to_string_lossy().ends_with(".part"))
+        .filter_map(|n| std::fs::metadata(dir.path().join(n)).ok())
+        .map(|m| m.len())
+        .sum();
+    // On a fast link the video stream may already be finished (`name.f135.mp4`) with the audio not
+    // started yet, so there is no `.part` file; a finished stream is kept progress too.
+    let is_partial = |n: &std::ffi::OsString| {
+        let n = n.to_string_lossy();
+        n.ends_with(".part") || n.contains(&format!(".f{}", opt.format.split('+').next().unwrap_or_default()))
+    };
+    assert!(parts.iter().any(is_partial), "partial data kept: {parts:?}");
     tokio::time::sleep(Duration::from_secs(1)).await;
     h.act(ids.clone(), Action::Resume).await.unwrap();
     while status(&db).status != TaskStatus::Completed {
@@ -100,5 +112,8 @@ async fn youtube_analyze_and_download_with_pause() {
     assert!(leftovers.is_empty(), "temporary files left: {leftovers:?}");
     let first_after = rec.0.lock().iter().skip_while(|p| p.done != before.done).nth(2).cloned();
     eprintln!("first progress after resume: {first_after:?}");
+    // Resuming must not send the bar back: streams finished before the pause still count.
+    let low = rec.0.lock().iter().skip_while(|p| p.done != before.done).skip(1).map(|p| p.done).min();
+    assert!(low.unwrap_or(u64::MAX) >= finished_before, "progress dropped after resume: {low:?} < {finished_before}");
     h.shutdown().await;
 }

@@ -588,8 +588,10 @@ pub fn parse_progress_line(line: &str) -> Option<ProgressLine> {
         return None;
     }
     let num = |x: &str| x.parse::<f64>().ok().filter(|v| v.is_finite() && *v >= 0.0).map(|v| v as u64);
-    let done = num(p[1]).unwrap_or(0);
     let total = num(p[2]).or_else(|| num(p[3])).filter(|t| *t > 0);
+    // A stream already on disk (resume after pause) is reported as `finished` with no
+    // downloaded_bytes; count it as complete so the bar does not drop back.
+    let done = num(p[1]).or(if p[0] == "finished" { total } else { None }).unwrap_or(0);
     Some(ProgressLine { format_id: p[6].to_string(), done, total, speed: num(p[4]).unwrap_or(0), eta: num(p[5]) })
 }
 
@@ -969,6 +971,8 @@ mod tests {
         assert_eq!(p, ProgressLine { format_id: "137".into(), done: 1_048_576, total: Some(66_072_637), speed: 2_500_000, eta: Some(25) });
         let p = parse_progress_line("ENDL downloading 500 NA 9000.0 NA NA 251").unwrap();
         assert_eq!(p, ProgressLine { format_id: "251".into(), done: 500, total: Some(9000), speed: 0, eta: None });
+        let p = parse_progress_line("ENDL finished NA 11000000 NA NA NA 135").unwrap();
+        assert_eq!((p.done, p.total), (11_000_000, Some(11_000_000)), "already-downloaded stream counts as done");
         assert!(parse_progress_line("[download] 10%").is_none());
     }
 
