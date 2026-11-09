@@ -209,6 +209,21 @@ impl Tools {
                 },
                 Err(e) => log::warn!("could not check for a yt-dlp update: {e}"),
             },
+            // A yt-dlp installed outside ENSave (pip, ~/.local/bin, distro) is never updated by
+            // us; when it is more than a month old, sites start to break. Install a managed copy,
+            // which is found first and kept up to date, and leave the user's copy alone.
+            Some((path, false)) if update => {
+                let v = self.version(ToolKind::YtDlp).await.unwrap_or_default();
+                if let Some(age) = yt_dlp_age_days(&v, today_days()).filter(|a| *a > 30) {
+                    match self.install(ToolKind::YtDlp).await {
+                        Ok(nv) => {
+                            log::info!("yt-dlp {v} at {} is {age} days old; installed ENSave's own yt-dlp {nv}", path.display());
+                            done.push("yt-dlp");
+                        }
+                        Err(e) => log::warn!("could not install a newer yt-dlp (system copy is {age} days old): {e}"),
+                    }
+                }
+            }
             _ => {}
         }
         if self.path(ToolKind::Deno).is_none() && self.path(ToolKind::Node).is_none() {

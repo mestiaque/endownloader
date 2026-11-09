@@ -478,11 +478,16 @@ pub fn map_error(msg: &str, yt_dlp_age: Option<i64>) -> DlError {
         DlError::DiskFull
     } else if has(&["unable to download webpage", "timed out", "connection reset", "connection refused", "name or service not known", "temporary failure in name resolution", "network is unreachable", "getaddrinfo", "read timed out", "incomplete read", "http error 5"]) {
         DlError::Network(msg.to_string())
-    } else if has(&["unsupported url", "unable to extract", "nsig", "signature", "requested format is not available", "no video formats found", "failed to parse", "please report this issue"]) {
+    } else if l.contains("unsupported url") {
+        // No extractor matched (or the site redirected to an age/login check): updating yt-dlp
+        // would not help, so never call this "outdated".
+        DlError::Other(
+            "No video or audio was found on this page. It may be a category, search, sign-in or age-check page: open one video and paste its link, or use Download as a file.".into(),
+        )
+    } else if has(&["unable to extract", "nsig", "signature", "requested format is not available", "no video formats found", "failed to parse", "please report this issue"]) {
+        // The site changed and the extractor broke: a newer yt-dlp usually fixes this.
         if yt_dlp_age.is_some_and(|d| d > 45) {
             DlError::ToolOutdated("yt-dlp".into())
-        } else if l.contains("unsupported url") {
-            DlError::Other("This link is not supported (no video or audio was found on the page)".into())
         } else {
             DlError::Other(msg.to_string())
         }
@@ -987,6 +992,9 @@ mod tests {
         assert_eq!(map_error("HTTP Error 429: Too Many Requests", None), DlError::RateLimited);
         assert_eq!(map_error("Unable to extract uploader id", Some(120)), DlError::ToolOutdated("yt-dlp".into()));
         assert!(matches!(map_error("Unsupported URL: https://x", Some(3)), DlError::Other(_)));
+        // An unsupported page is not fixed by updating, however old yt-dlp is.
+        assert!(matches!(map_error("ERROR: Unsupported URL: https://myapi.agego.com/noJS", Some(90)), DlError::Other(_)));
+        assert!(matches!(map_error("ERROR: Unable to extract nsig function", Some(90)), DlError::ToolOutdated(_)));
         assert!(matches!(map_error("Unable to download webpage: timed out", None), DlError::Network(_)));
     }
 
