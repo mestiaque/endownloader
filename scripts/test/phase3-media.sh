@@ -43,6 +43,7 @@ for i in $(seq 1 120); do
   sleep 1
 done
 q "SELECT id, status, title, filename, done, total, error FROM tasks" | sed 's/^/  db: /'
+sleep 1   # let the UI receive the final update and finish the progress-bar transition
 import -window root "$OUT/3-done.png"
 ls -la "$HOME/Downloads/Video" 2>&1 | sed 's/^/  /'
 F=$(ls "$HOME"/Downloads/Video/*.mp4 "$HOME"/Downloads/Video/*.mkv 2>/dev/null | head -1)
