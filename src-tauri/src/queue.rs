@@ -5,7 +5,7 @@ use crate::state::AppState;
 use endl_core::db::NewTask;
 use endl_core::filename::name_from_url;
 use endl_core::links::extract_links;
-use endl_core::media::{is_media_url, quality_option, MediaOption};
+use endl_core::media::{is_media_url, looks_like_page, quality_option, MediaOption};
 use endl_core::task::EngineKind;
 use endl_core::scheduler::{Notifier, ProgressItem, RunConfig};
 use endl_core::task::{Action, Task};
@@ -49,6 +49,8 @@ pub struct AddOptions {
     pub folder: Option<String>,
     pub quality: Option<String>,
     pub allow_duplicates: bool,
+    /// Download page links as plain files instead of analysing them with yt-dlp.
+    pub as_file: bool,
 }
 
 pub fn emit_upsert(app: &AppHandle, tasks: &[Task]) {
@@ -124,7 +126,7 @@ pub fn add_links(app: &AppHandle, text: &str, opts: AddOptions) -> Result<AddRes
     let mut new = Vec::new();
     let mut media_direct = Vec::new();
     for link in extracted.links {
-        if is_media_url(&link) {
+        if !opts.as_file && (is_media_url(&link) || looks_like_page(&link)) {
             // From the command line (or with a quality) media is queued right away;
             // otherwise the window shows the analysis card first.
             if opts.quality.is_some() {

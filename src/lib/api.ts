@@ -31,8 +31,8 @@ export const api = {
   importSettings: (path: string) => invoke<Settings>("import_settings", { path }),
 
   listTasks: () => invoke<Task[]>("list_tasks"),
-  addLinks: (text: string, opts: { folder?: string | null; quality?: string | null; allowDuplicates?: boolean } = {}) =>
-    invoke<AddResult>("add_links", { text, folder: opts.folder ?? null, quality: opts.quality ?? null, allowDuplicates: opts.allowDuplicates ?? false }),
+  addLinks: (text: string, opts: { folder?: string | null; quality?: string | null; allowDuplicates?: boolean; asFile?: boolean } = {}) =>
+    invoke<AddResult>("add_links", { text, folder: opts.folder ?? null, quality: opts.quality ?? null, allowDuplicates: opts.allowDuplicates ?? false, asFile: opts.asFile ?? false }),
   analyzeUrl: (url: string, playlist = false) => invoke<MediaInfo>("analyze_url", { url, playlist }),
   addMedia: (items: MediaItem[], option: MediaOption, folder?: string | null) => invoke<Task[]>("add_media", { items, option, folder: folder ?? null }),
   toolsStatus: () => invoke<ToolInfo[]>("tools_status"),

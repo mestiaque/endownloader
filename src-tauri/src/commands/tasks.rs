@@ -10,8 +10,8 @@ pub fn list_tasks(state: State<AppState>) -> Result<Vec<Task>> {
 }
 
 #[tauri::command]
-pub fn add_links(app: AppHandle, text: String, folder: Option<String>, quality: Option<String>, allow_duplicates: Option<bool>) -> Result<AddResult> {
-    queue::add_links(&app, &text, AddOptions { folder, quality, allow_duplicates: allow_duplicates.unwrap_or(false) })
+pub fn add_links(app: AppHandle, text: String, folder: Option<String>, quality: Option<String>, allow_duplicates: Option<bool>, as_file: Option<bool>) -> Result<AddResult> {
+    queue::add_links(&app, &text, AddOptions { folder, quality, allow_duplicates: allow_duplicates.unwrap_or(false), as_file: as_file.unwrap_or(false) })
 }
 
 /// Add every link found in a text file (one per line, or any text containing links).

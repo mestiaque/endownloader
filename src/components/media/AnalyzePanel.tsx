@@ -73,6 +73,18 @@ function CardError({ card }: { card: Card }) {
       toast({ kind: "error", title: "Could not update yt-dlp", detail: errorMessage(e) });
     }
   };
+  // yt-dlp found no video or audio: the link may simply be a file behind a page-like URL.
+  const asFile = async () => {
+    try {
+      const r = await api.addLinks(card.url, { asFile: true, allowDuplicates: true });
+      if (r.added.length) {
+        toast({ kind: "success", title: "Downloading as a file", detail: card.url });
+        useAnalyze.getState().close(card.key);
+      }
+    } catch (e) {
+      toast({ kind: "error", title: "Could not add the link", detail: errorMessage(e) });
+    }
+  };
   return (
     <div className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/5 p-3">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
@@ -90,6 +102,12 @@ function CardError({ card }: { card: Card }) {
         {card.errorKind === "toolOutdated" && (
           <Button size="sm" variant="primary" onClick={update}>
             Update yt-dlp
+          </Button>
+        )}
+        {card.errorKind !== "drm" && card.errorKind !== "loginRequired" && (
+          <Button size="sm" variant="default" onClick={asFile} title="Save what this link returns, without looking for video or audio">
+            <Download className="h-3.5 w-3.5" />
+            Download as a file
           </Button>
         )}
         {card.errorKind !== "drm" && (

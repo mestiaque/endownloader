@@ -53,6 +53,27 @@ pub fn is_media_url(link: &str) -> bool {
     MEDIA_HOSTS.iter().any(|m| host == *m || host.ends_with(&format!(".{m}")))
 }
 
+/// A link that points at a web page rather than a file: no file extension in the last path
+/// segment (or a page extension such as .html/.php). yt-dlp supports far more sites than
+/// [`MEDIA_HOSTS`], so such links are analysed first instead of saving the page's HTML; when
+/// yt-dlp finds nothing, the analysis card offers to download the link as a plain file.
+pub fn looks_like_page(link: &str) -> bool {
+    let Ok(u) = url::Url::parse(link) else { return false };
+    if !matches!(u.scheme(), "http" | "https") {
+        return false;
+    }
+    let last = u.path_segments().and_then(|mut s| s.rfind(|seg| !seg.is_empty())).unwrap_or("");
+    match last.rsplit_once('.') {
+        None => true,
+        Some((_, ext)) => {
+            let ext = ext.to_ascii_lowercase();
+            const PAGE: &[&str] = &["html", "htm", "shtml", "xhtml", "php", "asp", "aspx", "jsp", "cfm", "cgi", "pl"];
+            // "v1.2-beta" style segments are not file extensions either.
+            PAGE.contains(&ext.as_str()) || ext.len() > 5 || !ext.chars().all(|c| c.is_ascii_alphanumeric())
+        }
+    }
+}
+
 /// The playlist id of a YouTube watch link that also names a playlist (`&list=…`).
 pub fn youtube_list_id(link: &str) -> Option<String> {
     let u = url::Url::parse(link).ok()?;
@@ -1002,5 +1023,28 @@ mod tests {
         let mut got: Vec<String> = partial_files(d.path(), "abc").iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
         got.sort();
         assert_eq!(got, vec!["Song [abc].f137.mp4.part", "Song [abc].f140.m4a", "Song [abc].mp4.part-Frag3", "Song [abc].mp4.ytdl"]);
+    }
+
+    #[test]
+    fn pages_versus_files() {
+        for page in [
+            "https://xhamster.com/videos/some-title-xh9AUAz",
+            "https://example.com/watch?v=1",
+            "https://example.com/",
+            "https://news.example.com/2026/story.html",
+            "https://example.com/view.php?id=7",
+            "https://example.com/releases/v1.2-beta",
+        ] {
+            assert!(looks_like_page(page), "{page}");
+        }
+        for file in [
+            "https://example.com/file.zip",
+            "https://cdn.example.com/a/b/movie.MP4?token=x",
+            "https://github.com/o/r/releases/download/v1/app_1.0_amd64.deb",
+            "https://example.com/ubuntu-24.04.1-desktop-amd64.iso",
+            "ftp://example.com/x",
+        ] {
+            assert!(!looks_like_page(file), "{file}");
+        }
     }
 }
