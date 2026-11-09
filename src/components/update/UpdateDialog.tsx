@@ -34,7 +34,6 @@ export function UpdateDialog() {
 
   const start = async () => {
     if (!info.installable) {
-      await api.openReleasePage().catch(() => {});
       close();
       return;
     }
@@ -86,7 +85,7 @@ export function UpdateDialog() {
           {phase === "idle" &&
             (info.installable
               ? "The update downloads and installs in place; your downloads, queue and settings are kept. Running downloads continue after the restart."
-              : "This copy was not installed from a package, so it cannot update itself. Download the new version from the release page.")}
+              : "This is a development build, so it cannot update itself. Copies installed from the ENDownloader installer, .deb, AppImage or portable zip update in place.")}
         </div>
         <div className="flex justify-end gap-2">
           {phase === "installed" ? (
@@ -96,9 +95,13 @@ export function UpdateDialog() {
             </>
           ) : (
             <>
-              <Button onClick={close} disabled={busy}>Later</Button>
+              {info.installable && (
+                <Button onClick={close} disabled={busy}>
+                  Later
+                </Button>
+              )}
               <Button variant="primary" onClick={start} disabled={busy}>
-                {phase === "error" ? "Try again" : info.installable ? "Update now" : "Open download page"}
+                {phase === "error" ? "Try again" : info.installable ? "Update now" : "OK"}
               </Button>
             </>
           )}

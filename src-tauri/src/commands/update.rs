@@ -6,6 +6,8 @@
 //!                      (GitHub publishes one per asset) and installs it in place:
 //!                      .deb → `pkexec apt-get install` (system password prompt),
 //!                      AppImage → the file is replaced atomically,
+//!                      Windows portable zip → unpacked, then copied over this folder
+//!                      after ENDownloader quits (the data folder is left alone),
 //!                      Windows → the NSIS installer runs silently after ENDownloader quits.
 //! * `restart_app`    – starts the new version once this process has exited.
 
@@ -37,6 +39,8 @@ enum Kind {
     Deb,
     AppImage(PathBuf),
     Windows,
+    /// The portable zip: the folder that holds the program.
+    Portable(PathBuf),
     Unmanaged,
 }
 
@@ -52,7 +56,8 @@ fn install_kind() -> Kind {
         // The NSIS installer puts uninstall.exe next to the program.
         return match exe.parent() {
             Some(dir) if dir.join("uninstall.exe").exists() => Kind::Windows,
-            _ => Kind::Unmanaged,
+            Some(dir) => Kind::Portable(dir.to_path_buf()),
+            None => Kind::Unmanaged,
         };
     }
     if let Some(p) = std::env::var_os("APPIMAGE") {
@@ -71,6 +76,7 @@ fn pick_asset<'a>(assets: &'a [serde_json::Value], kind: &Kind) -> Option<&'a se
             Kind::Deb => n.starts_with("ENDownloader_") && n.ends_with("_amd64.deb"),
             Kind::AppImage(_) => n.starts_with("ENDownloader_") && n.ends_with("_amd64.AppImage"),
             Kind::Windows => n.starts_with("ENDownloader_") && n.ends_with("-setup.exe"),
+            Kind::Portable(_) => n == "ENDownloader-portable-windows-x64.zip",
             Kind::Unmanaged => false,
         }
     })
@@ -101,7 +107,8 @@ fn update_from_release(rel: &serde_json::Value, current: &str, kind: &Kind) -> O
         info.url = a["browser_download_url"].as_str().unwrap_or("").to_string();
         info.size = a["size"].as_u64().unwrap_or(0);
         info.sha256 = a["digest"].as_str().and_then(|d| d.strip_prefix("sha256:")).unwrap_or("").to_lowercase();
-        info.installable = !info.url.is_empty();
+        // Without a published checksum nothing is installed.
+        info.installable = !info.url.is_empty() && info.sha256.len() == 64;
     }
     Some(info)
 }
@@ -192,7 +199,7 @@ fn make_executable(p: &Path) -> std::io::Result<()> {
 pub async fn install_update(app: AppHandle, info: UpdateInfo) -> Result<String, String> {
     let kind = install_kind();
     if !info.installable || kind == Kind::Unmanaged {
-        return Err(format!("This copy cannot update itself. Download the new version from {RELEASES_PAGE}"));
+        return Err("This copy cannot update itself (it is a development build).".into());
     }
     let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("updates");
     let app2 = app.clone();
@@ -251,18 +258,42 @@ pub async fn install_update(app: AppHandle, info: UpdateInfo) -> Result<String, 
                 });
                 Ok("exiting".into())
             }
+            Kind::Portable(dir) => {
+                // Unpack next to the download (zip paths are checked to stay inside), then
+                // copy over the program folder once this process has exited.
+                let staging = file.with_extension("unpacked");
+                let _ = std::fs::remove_dir_all(&staging);
+                std::fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+                let archive = std::fs::File::open(&file).map_err(|e| e.to_string())?;
+                let mut zip = zip::ZipArchive::new(archive).map_err(|e| format!("The update archive is damaged: {e}"))?;
+                zip.extract(&staging).map_err(|e| format!("Could not unpack the update: {e}"))?;
+                let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+                let script = format!(
+                    "timeout /t 2 /nobreak >nul & xcopy \"{}\\*\" \"{}\\\" /E /Y /Q >nul & start \"\" \"{}\"",
+                    staging.display(),
+                    dir.display(),
+                    exe.display()
+                );
+                let mut cmd = std::process::Command::new("cmd");
+                cmd.args(["/C", &script]);
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    cmd.creation_flags(0x0000_0008 | 0x0000_0200 | 0x0800_0000); // DETACHED | NEW_GROUP | NO_WINDOW
+                }
+                cmd.spawn().map_err(|e| format!("Could not start the update: {e}"))?;
+                let app3 = app2.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(500));
+                    app3.exit(0);
+                });
+                Ok("exiting".into())
+            }
             Kind::Unmanaged => unreachable!(),
         }
     })
     .await
     .map_err(|e| e.to_string())?
-}
-
-/// Opens the releases page (fixed URL; the webview cannot open arbitrary links through this).
-#[tauri::command]
-pub fn open_release_page(app: AppHandle) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    app.opener().open_url(RELEASES_PAGE, None::<&str>).map_err(|e| e.to_string())
 }
 
 /// Start the freshly installed version after this process exits (a direct re-exec would be
@@ -297,11 +328,12 @@ mod tests {
     use serde_json::json;
 
     fn release(tag: &str) -> serde_json::Value {
+        let sha = format!("sha256:{}", "AB".repeat(32));
         json!({ "tag_name": tag, "body": " Fixes ", "html_url": "https://example.invalid/r", "assets": [
-            { "name": "ENDownloader_9.0.0_x64-setup.exe", "browser_download_url": "https://x/w.exe", "size": 3 },
-            { "name": "ENDownloader_9.0.0_amd64.AppImage", "browser_download_url": "https://x/a.AppImage", "size": 4 },
-            { "name": "ENDownloader_9.0.0_amd64.deb", "browser_download_url": "https://x/a.deb", "size": 5,
-              "digest": "sha256:ABCD" }
+            { "name": "ENDownloader_9.0.0_x64-setup.exe", "browser_download_url": "https://x/w.exe", "size": 3, "digest": sha },
+            { "name": "ENDownloader_9.0.0_amd64.AppImage", "browser_download_url": "https://x/a.AppImage", "size": 4, "digest": sha },
+            { "name": "ENDownloader_9.0.0_amd64.deb", "browser_download_url": "https://x/a.deb", "size": 5, "digest": sha },
+            { "name": "ENDownloader-portable-windows-x64.zip", "browser_download_url": "https://x/p.zip", "size": 6, "digest": sha }
         ]})
     }
 
@@ -315,7 +347,10 @@ mod tests {
     #[test]
     fn picks_the_asset_for_this_install() {
         let deb = update_from_release(&release("v9.0.0"), "0.2.0", &Kind::Deb).unwrap();
-        assert_eq!((deb.asset_name.as_str(), deb.sha256.as_str(), deb.notes.as_str()), ("ENDownloader_9.0.0_amd64.deb", "abcd", "Fixes"));
+        assert_eq!((deb.asset_name.as_str(), deb.notes.as_str(), deb.installable), ("ENDownloader_9.0.0_amd64.deb", "Fixes", true));
+        assert_eq!(deb.sha256, "ab".repeat(32));
+        let portable = update_from_release(&release("v9.0.0"), "0.2.0", &Kind::Portable("C:/x".into())).unwrap();
+        assert_eq!((portable.asset_name.as_str(), portable.installable), ("ENDownloader-portable-windows-x64.zip", true));
         let img = update_from_release(&release("v9.0.0"), "0.2.0", &Kind::AppImage("/x".into())).unwrap();
         assert_eq!(img.asset_name, "ENDownloader_9.0.0_amd64.AppImage");
         let win = update_from_release(&release("v9.0.0"), "0.2.0", &Kind::Windows).unwrap();

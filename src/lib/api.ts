@@ -61,7 +61,6 @@ export const api = {
   checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
   installUpdate: (info: UpdateInfo) => invoke<"restart" | "exiting">("install_update", { info }),
   restartApp: () => invoke<void>("restart_app"),
-  openReleasePage: () => invoke<void>("open_release_page"),
 };
 
 /** Commands reject with `{ kind, message }` (DlError) or a plain string. */

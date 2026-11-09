@@ -150,7 +150,6 @@ pub fn run() {
             update::check_update,
             update::install_update,
             update::restart_app,
-            update::open_release_page,
         ])
         .build(tauri::generate_context!());
     match result {

@@ -19,27 +19,91 @@ aria2: on Ubuntu the `.deb` depends on the `aria2` package; Windows bundles the 
 
 How to use it: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
-## Install
+## Install and uninstall
 
-Download from [Releases](https://github.com/mestiaque/endownloader/releases/latest):
+ENDownloader is published as GitHub releases. The commands below always fetch the **latest** version, so
+they work on any computer with an internet connection. Installed copies then update themselves
+(Settings → General → *Check for updates*).
 
-| System | File | Notes |
-|---|---|---|
-| Ubuntu 22.04+ | `ENDownloader_<version>_amd64.deb` | `sudo apt install ./ENDownloader_*_amd64.deb` (pulls in `aria2` and `ffmpeg`) |
-| Any Linux | `ENDownloader_<version>_amd64.AppImage` | `chmod +x` and run; install `aria2` and `ffmpeg` yourself |
-| Windows 10/11 | `ENDownloader_<version>_x64-setup.exe` | Installer, no admin rights needed; aria2 included |
-| Windows (no install) | `ENDownloader-portable-windows-x64.zip` | Unzip anywhere; settings stay in the `data` folder next to it |
+### Ubuntu / Debian (22.04 or newer), .deb (recommended)
 
-Nothing else to install: yt-dlp (kept up to date), Deno and, on Windows, FFmpeg are downloaded
-automatically when first needed, each checked against its published SHA-256.
+Open a terminal (**Ctrl+Alt+T**) and paste:
 
-**Updates.** ENDownloader asks GitHub for a newer release about once a day (Settings → General →
-*Check for updates automatically*, or *Check now*). The `.deb`, AppImage and Windows installer
-update themselves in place; the portable zip and development builds open the download page instead.
+```bash
+sudo apt update && sudo apt install -y curl
+URL=$(curl -fsSL https://api.github.com/repos/mestiaque/endownloader/releases/latest | grep -o 'https://[^"]*_amd64\.deb' | head -1)
+curl -fL -o /tmp/endownloader.deb "$URL"
+sudo apt install -y /tmp/endownloader.deb
+```
 
-**Releasing.** Bump the version in `package.json`, `Cargo.toml` (workspace) and
-`src-tauri/tauri.conf.json`, then push a tag `vX.Y.Z`. The `build` workflow tests, bundles both
-platforms and publishes the release that installed copies pick up.
+`apt` also installs what ENDownloader needs. Start it from the app grid (search “ENDownloader”) or run `endownloader`.
+Enter your login password when asked (nothing is shown while you type; that is normal).
+Running the same commands again later upgrades to the newest version.
+
+### Any Linux, AppImage (no installation)
+
+```bash
+mkdir -p ~/Applications
+URL=$(curl -fsSL https://api.github.com/repos/mestiaque/endownloader/releases/latest | grep -o 'https://[^"]*_amd64\.AppImage' | head -1)
+curl -fL -o ~/Applications/ENDownloader.AppImage "$URL"
+chmod +x ~/Applications/ENDownloader.AppImage
+~/Applications/ENDownloader.AppImage
+```
+
+### Windows 10 / 11, installer
+
+Open **PowerShell** (Start → type “PowerShell”) and paste:
+
+```powershell
+$r = Invoke-RestMethod https://api.github.com/repos/mestiaque/endownloader/releases/latest
+$a = $r.assets | Where-Object name -like '*-setup.exe' | Select-Object -First 1
+Invoke-WebRequest $a.browser_download_url -OutFile "$env:TEMP\$($a.name)"
+Start-Process "$env:TEMP\$($a.name)" -ArgumentList '/S' -Wait
+```
+
+No administrator rights are needed. ENDownloader appears in the Start menu.
+
+### Windows, portable (no installation)
+
+```powershell
+$r = Invoke-RestMethod https://api.github.com/repos/mestiaque/endownloader/releases/latest
+$a = $r.assets | Where-Object name -eq 'ENDownloader-portable-windows-x64.zip'
+Invoke-WebRequest $a.browser_download_url -OutFile "$env:TEMP\ENDownloader-portable-windows-x64.zip"
+Expand-Archive "$env:TEMP\ENDownloader-portable-windows-x64.zip" -DestinationPath "$HOME\ENDownloader" -Force
+& "$HOME\ENDownloader\ENDownloader.exe"
+```
+
+Everything stays in that folder (copy it to a USB stick if you like). It updates itself too.
+
+### Uninstall
+
+**Ubuntu / Debian:**
+
+```bash
+sudo apt remove -y en-downloader
+```
+
+**AppImage:** delete the file: `rm ~/Applications/ENDownloader.AppImage`
+
+**Windows (installer):** Settings → Apps → ENDownloader → Uninstall, or in PowerShell:
+
+```powershell
+$u = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+  Where-Object DisplayName -like 'ENDownloader*' | Select-Object -First 1
+Start-Process $u.UninstallString.Trim('"') -ArgumentList '/S' -Wait
+```
+
+**Windows (portable):** delete the folder: `Remove-Item -Recurse -Force "$HOME\ENDownloader"`
+
+**Also remove settings and data** (optional). Downloaded files are never touched; only the queue, history, settings and the helper tools ENDownloader fetched are removed.
+
+```bash
+rm -rf ~/.local/share/com.mestiaque.endownloader ~/.cache/com.mestiaque.endownloader ~/.config/com.mestiaque.endownloader                     # Linux
+```
+
+```powershell
+Remove-Item -Recurse -Force "$env:APPDATA\com.mestiaque.endownloader","$env:LOCALAPPDATA\com.mestiaque.endownloader" -ErrorAction SilentlyContinue   # Windows
+```
 
 ## Quick start (development)
 

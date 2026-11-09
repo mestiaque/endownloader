@@ -156,7 +156,7 @@ installs in place:
 Your downloads, queue and settings are kept. To check now, use Settings → General →
 **Check now**. You can turn the automatic check off there too.
 
-The portable Windows zip can't update itself. ENDownloader opens the download page instead.
+The portable Windows zip updates itself too: the new version is unpacked and copied over the folder when ENDownloader restarts (your `data` folder is kept).
 
 ## Privacy
 
