@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ENDownloader",
+  "mainBinaryName": "endownloader",
+  "version": "0.1.0",
+  "identifier": "com.mestiaque.endownloader",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ENDownloader",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 560,
+        "backgroundColor": "#131315",
+        "dragDropEnabled": true,
+        "center": true,
+        "decorations": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "M. Estiaque Ahmed Khan",
+    "category": "Utility",
+    "shortDescription": "Fast download manager for files and media",
+    "longDescription": "ENDownloader downloads files and media from links, in parallel and in the background, with resume after restarts.",
+    "copyright": "© 2026 M. Estiaque Ahmed Khan · MIT License",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "linux": {
+      "deb": { "section": "net", "desktopTemplate": "endownloader.desktop" },
+      "rpm": { "desktopTemplate": "endownloader.desktop" }
+    },
+    "windows": {
+      "nsis": { "installMode": "currentUser", "displayLanguageSelector": false },
+      "webviewInstallMode": { "type": "downloadBootstrapper" }
+    },
+    "homepage": "https://mestiaque.com"
+  }
+}

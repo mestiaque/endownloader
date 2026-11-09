@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --v-fg: 255 255 255;
+  --accent: 59 130 246;
+  --accent-fg: 255 255 255;
+  --danger: 239 68 68;
+  --success: 34 197 94;
+}
+
+.dark {
+  --bg: 19 19 21;
+  --panel: 25 25 28;
+  --raised: 34 34 38;
+  --line: 44 44 50;
+  --fg: 233 233 237;
+  --muted: 158 158 168;
+  --faint: 104 104 114;
+  color-scheme: dark;
+}
+
+.light {
+  --bg: 244 244 246;
+  --panel: 252 252 253;
+  --raised: 236 236 240;
+  --line: 220 220 226;
+  --fg: 24 24 27;
+  --muted: 88 88 100;
+  --faint: 148 148 158;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg text-fg antialiased;
+  font-family: theme(fontFamily.sans);
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ---------- Glass: frosted, blurred panels over an aurora gradient ---------- */
+.glass {
+  --bg: 20 17 36;
+  --panel: 34 29 60;
+  --raised: 52 46 86;
+  --line: 74 68 112;
+  --fg: 242 241 248;
+  --muted: 196 192 216;
+  --faint: 146 140 172;
+}
+.glass body {
+  background-color: #12101f;
+  background-image: radial-gradient(circle at 10% 15%, rgb(139 108 255 / 0.55), transparent 42%),
+    radial-gradient(circle at 90% 10%, rgb(226 64 122 / 0.42), transparent 40%),
+    radial-gradient(circle at 72% 92%, rgb(56 189 248 / 0.38), transparent 45%),
+    radial-gradient(circle at 25% 85%, rgb(52 211 153 / 0.22), transparent 40%);
+  background-attachment: fixed;
+}
+.glass aside.bg-panel,
+.glass header,
+.glass footer {
+  background-color: rgb(255 255 255 / 0.06) !important;
+  backdrop-filter: blur(24px) saturate(1.4);
+  border-color: rgb(255 255 255 / 0.12) !important;
+}
+.glass main .bg-panel,
+.glass main .bg-raised {
+  background-color: rgb(255 255 255 / 0.07) !important;
+  border-color: rgb(255 255 255 / 0.14) !important;
+  backdrop-filter: blur(14px);
+}
+.glass [role="dialog"],
+.glass [role="menu"] {
+  background-color: rgb(32 27 58 / 0.86) !important;
+  border-color: rgb(255 255 255 / 0.16) !important;
+  backdrop-filter: blur(30px) saturate(1.5);
+}
+.glass input.bg-bg,
+.glass header input {
+  background-color: rgb(255 255 255 / 0.08) !important;
+  border-color: rgb(255 255 255 / 0.16) !important;
+}
+
+/* Thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--line)) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line));
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--faint));
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 1px;
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgb(var(--raised));
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--line) / 0.5), transparent);
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+input[type="number"]::-webkit-inner-spin-button {
+  opacity: 0.4;
+}
+
+/* Indeterminate progress (unknown size): a sliding band, never a fake percentage. */
+.progress-indeterminate {
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  border-radius: 9999px;
+  background: rgb(var(--accent));
+  animation: indeterminate 1.3s ease-in-out infinite;
+}
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(290%); }
+}
+.reduce-motion .progress-indeterminate {
+  animation: none;
+  width: 100%;
+  opacity: 0.35;
+}

@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/endl-core", "src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["M. Estiaque Ahmed Khan <info@mestiaque.com>"]
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = 3
+strip = true

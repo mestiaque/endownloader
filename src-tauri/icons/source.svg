@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06B6D4"/>
+      <stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+    <clipPath id="clip"><rect x="16" y="16" width="480" height="480" rx="112"/></clipPath>
+    <filter id="blobBlur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="48"/></filter>
+    <filter id="glassShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#1E1B4B" flood-opacity="0.35"/>
+    </filter>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="glassStroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0.12"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E0F2FE"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect x="16" y="16" width="480" height="480" fill="url(#bg)"/>
+    <circle cx="120" cy="110" r="150" fill="#22D3EE" opacity="0.55" filter="url(#blobBlur)"/>
+    <circle cx="420" cy="430" r="170" fill="#A855F7" opacity="0.5" filter="url(#blobBlur)"/>
+  </g>
+  <g filter="url(#glassShadow)">
+    <rect x="106" y="96" width="300" height="320" rx="64" fill="#fff" fill-opacity="0.16" stroke="url(#glassStroke)" stroke-width="4"/>
+    <rect x="106" y="96" width="300" height="140" rx="64" fill="url(#shine)"/>
+  </g>
+  <g filter="url(#glow)" fill="none" stroke="url(#arrow)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 150 V292" stroke-width="34"/>
+    <path d="M190 232 L256 298 L322 232" stroke-width="34"/>
+    <path d="M176 350 H336" stroke-width="28"/>
+  </g>
+</svg>
