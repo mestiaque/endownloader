@@ -445,7 +445,7 @@ pub fn map_error(msg: &str, yt_dlp_age: Option<i64>) -> DlError {
         DlError::LoginRequired
     } else if has(&["available in your country", "geo restrict", "geo-restrict", "not available in your region", "blocked it in your country"]) {
         DlError::GeoBlocked
-    } else if has(&["private video", "video unavailable", "has been removed", "no longer available", "account associated", "does not exist", "has been terminated", "deleted", "this post is unavailable"]) {
+    } else if has(&["private video", "video unavailable", "video is unavailable", "has been removed", "no longer available", "account associated", "does not exist", "has been terminated", "deleted", "this post is unavailable"]) {
         DlError::Removed
     } else if has(&["http error 429", "too many requests", "rate-limit", "rate limit"]) {
         DlError::RateLimited
@@ -956,6 +956,7 @@ mod tests {
         let e = last_error("WARNING: x\nERROR: [youtube] abc: Video unavailable. This video is private\n").unwrap();
         assert_eq!(e, "Video unavailable. This video is private");
         assert_eq!(map_error(&e, None), DlError::Removed);
+        assert_eq!(map_error("This video is unavailable", None), DlError::Removed);
         assert_eq!(map_error("Sign in to confirm you're not a bot", None), DlError::LoginRequired);
         assert_eq!(map_error("This video is DRM protected", None), DlError::Drm);
         assert_eq!(map_error("The uploader has not made this video available in your country", None), DlError::GeoBlocked);

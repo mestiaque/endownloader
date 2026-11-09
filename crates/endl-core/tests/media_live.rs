@@ -117,3 +117,72 @@ async fn youtube_analyze_and_download_with_pause() {
     assert!(low.unwrap_or(u64::MAX) >= finished_before, "progress dropped after resume: {low:?} < {finished_before}");
     h.shutdown().await;
 }
+
+/// Runs one media task through the real scheduler to the end; returns the finished task.
+async fn download(opt: &endl_core::media::MediaOption, url: &str, media_id: &str, dir: &std::path::Path) -> Task {
+    let db = Arc::new(Db::open_in_memory().unwrap());
+    let engine = MediaEngine::new(tools(), Arc::new(MediaPrefs::default));
+    let (s, h) = Scheduler::new(db.clone(), Engines::new(vec![engine]), Arc::new(Rec::default()), Arc::new(RunConfig::default));
+    tokio::spawn(s.run());
+    let id = db
+        .insert_tasks(&[NewTask {
+            url: url.into(),
+            engine: EngineKind::Media,
+            folder: dir.to_string_lossy().into_owned(),
+            category: opt.kind.clone(),
+            connections: 1,
+            options: serde_json::json!({ "format": opt.format, "merge": opt.merge, "extractAudio": opt.extract_audio, "size": opt.size, "mediaId": media_id }),
+            ..Default::default()
+        }])
+        .unwrap()[0]
+        .id;
+    h.kick();
+    let t0 = Instant::now();
+    loop {
+        let t = db.get_task(id).unwrap().unwrap();
+        if matches!(t.status, TaskStatus::Completed | TaskStatus::Failed) {
+            h.shutdown().await;
+            return t;
+        }
+        assert!(t0.elapsed() < Duration::from_secs(240), "timeout: {t:?}");
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn youtube_mp3_extract() {
+    let opt = endl_core::media::quality_option("mp3");
+    let dir = tempfile::tempdir().unwrap();
+    let t = download(&opt, "https://www.youtube.com/watch?v=mk48xRzuNvA", "mk48xRzuNvA", dir.path()).await;
+    assert_eq!(t.status, TaskStatus::Completed, "failed: {:?}", t.error);
+    let name = t.filename.clone().unwrap();
+    let files: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    eprintln!("mp3: {name}, folder: {files:?}");
+    assert!(name.ends_with(".mp3"), "{name}");
+    assert_eq!(files, vec![name.clone()], "only the mp3 is left");
+    let bytes = std::fs::read(dir.path().join(&name)).unwrap();
+    assert!(bytes.len() > 1_000_000);
+    assert!(bytes.starts_with(b"ID3") || (bytes[0] == 0xFF && bytes[1] & 0xE0 == 0xE0), "not an MP3 file");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn youtube_playlist_entries() {
+    let info = analyze(&tools(), &MediaPrefs::default(), LINK, true).await.expect("analyze playlist");
+    eprintln!("playlist {:?}: {} entries; first: {:?}", info.playlist_id, info.entries.len(), info.entries.first().map(|e| &e.title));
+    assert!(info.is_playlist);
+    assert!(info.entries.len() > 5, "{} entries", info.entries.len());
+    for e in &info.entries {
+        assert!(!e.id.is_empty() && !e.title.is_empty(), "{e:?}");
+        assert!(e.url.starts_with("https://"), "{e:?}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn youtube_unavailable_video_is_typed_error() {
+    let err = analyze(&tools(), &MediaPrefs::default(), "https://www.youtube.com/watch?v=aaaaaaaaaaa", false).await.unwrap_err();
+    eprintln!("unavailable video: {err:?} / {err}");
+    assert_eq!(err, endl_core::error::DlError::Removed);
+}
