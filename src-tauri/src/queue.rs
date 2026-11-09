@@ -5,6 +5,8 @@ use crate::state::AppState;
 use endl_core::db::NewTask;
 use endl_core::filename::name_from_url;
 use endl_core::links::extract_links;
+use endl_core::media::{is_media_url, quality_option, MediaOption};
+use endl_core::task::EngineKind;
 use endl_core::scheduler::{Notifier, ProgressItem, RunConfig};
 use endl_core::task::{Action, Task};
 use endl_core::Result;
@@ -27,6 +29,19 @@ pub struct AddResult {
     pub duplicates: Vec<String>,
     /// Tokens that looked like links but were malformed.
     pub invalid: Vec<String>,
+    /// Media-site links: the UI analyses them and lets the user pick a format.
+    pub media: Vec<String>,
+}
+
+/// A media download chosen from an analysis card (or a playlist).
+#[derive(serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaItem {
+    pub url: String,
+    pub title: Option<String>,
+    pub thumbnail: Option<String>,
+    /// Site id of the video (names yt-dlp's partial files: `… [id].ext`).
+    pub media_id: Option<String>,
 }
 
 #[derive(Default, Clone)]
@@ -107,7 +122,18 @@ pub fn add_links(app: &AppHandle, text: &str, opts: AddOptions) -> Result<AddRes
     let base = state.download_base();
     let mut result = AddResult { invalid: extracted.invalid, ..Default::default() };
     let mut new = Vec::new();
+    let mut media_direct = Vec::new();
     for link in extracted.links {
+        if is_media_url(&link) {
+            // From the command line (or with a quality) media is queued right away;
+            // otherwise the window shows the analysis card first.
+            if opts.quality.is_some() {
+                media_direct.push(MediaItem { url: link, title: None, thumbnail: None, media_id: None });
+            } else {
+                result.media.push(link);
+            }
+            continue;
+        }
         if settings.detect_duplicates && !opts.allow_duplicates && state.db.find_duplicate(&link)?.is_some() {
             result.duplicates.push(link);
             continue;
@@ -133,13 +159,59 @@ pub fn add_links(app: &AppHandle, text: &str, opts: AddOptions) -> Result<AddRes
             ..Default::default()
         });
     }
+    if !media_direct.is_empty() {
+        let q = opts.quality.clone().unwrap_or_else(|| settings.media_quality.clone());
+        result.added.extend(add_media(app, &media_direct, &quality_option(&q), opts.folder.clone())?);
+    }
     if !new.is_empty() {
-        result.added = state.db.insert_tasks(&new)?;
-        log::info!("added {} task(s)", result.added.len());
-        emit_upsert(app, &result.added);
+        let files = state.db.insert_tasks(&new)?;
+        log::info!("added {} task(s)", files.len());
+        emit_upsert(app, &files);
+        result.added.extend(files);
         state.queue.kick();
     }
     Ok(result)
+}
+
+/// Queue media downloads with one chosen format.
+pub fn add_media(app: &AppHandle, items: &[MediaItem], option: &MediaOption, folder: Option<String>) -> Result<Vec<Task>> {
+    let state = app.state::<AppState>();
+    let settings = state.settings.read().clone();
+    let category = if option.kind == "audio" { "audio" } else { "video" }.to_string();
+    let folder = match folder {
+        Some(f) if !f.trim().is_empty() => PathBuf::from(f.trim()),
+        _ => settings.folder_for(&state.download_base(), &category),
+    };
+    let new: Vec<NewTask> = items
+        .iter()
+        .map(|it| NewTask {
+            url: it.url.clone(),
+            engine: EngineKind::Media,
+            title: it.title.clone(),
+            filename: None,
+            folder: folder.to_string_lossy().into_owned(),
+            category: category.clone(),
+            connections: 1,
+            options: serde_json::json!({
+                "format": option.format,
+                "merge": option.merge,
+                "extractAudio": option.extract_audio,
+                "size": if items.len() == 1 { option.size } else { None },
+                "quality": option.label,
+                "mediaId": it.media_id,
+                "thumbnail": it.thumbnail,
+            }),
+            ..Default::default()
+        })
+        .collect();
+    if new.is_empty() {
+        return Ok(Vec::new());
+    }
+    let added = state.db.insert_tasks(&new)?;
+    log::info!("added {} media task(s) ({})", added.len(), option.label);
+    emit_upsert(app, &added);
+    state.queue.kick();
+    Ok(added)
 }
 
 pub async fn apply(app: &AppHandle, ids: Vec<i64>, action: Action) -> Result<Vec<Task>> {

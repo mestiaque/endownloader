@@ -7,7 +7,9 @@ Sister apps: **ENViewer** (images) and **ENPlayer** (video and music); same look
 
 Status: **Phase 2** is done. The aria2 engine downloads files over several connections, with a
 queue that runs several downloads at once, pause/resume, automatic retries, and resume after a
-crash or restart. Phase 3 adds media sites (yt-dlp + FFmpeg). How it works:
+crash or restart. Phase 3 (in progress): media sites through yt-dlp + FFmpeg — links from
+YouTube, TikTok, Instagram… open an analysis card (thumbnail, title, Video/Audio quality
+table) and download the chosen format; playlists can be downloaded in bulk. How it works:
 [docs/how-it-works.md](docs/how-it-works.md).
 
 aria2: on Ubuntu the `.deb` depends on the `aria2` package; Windows bundles the official

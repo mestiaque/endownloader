@@ -10,8 +10,10 @@ pub mod error;
 pub mod filename;
 pub mod links;
 pub mod mask;
+pub mod media;
 pub mod scheduler;
 pub mod settings;
 pub mod task;
+pub mod tools;
 
 pub use error::{DlError, Result};

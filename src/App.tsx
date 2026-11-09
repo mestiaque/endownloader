@@ -7,6 +7,7 @@ import { StatusBar } from "./components/layout/StatusBar";
 import { Toolbar } from "./components/layout/Toolbar";
 import { SettingsDialog } from "./components/settings/SettingsDialog";
 import { ShortcutsDialog } from "./components/settings/ShortcutsDialog";
+import { AnalyzePanel } from "./components/media/AnalyzePanel";
 import { TaskList } from "./components/tasks/TaskList";
 import { ConfirmHost, PromptHost, Toaster } from "./components/ui/overlays";
 import { canPause, canResume } from "./engines/taskView";
@@ -201,6 +202,7 @@ export default function App() {
         <Sidebar />
         <main className="flex min-w-0 flex-1 flex-col">
           <Toolbar />
+          <AnalyzePanel />
           <TaskList />
           <StatusBar />
         </main>

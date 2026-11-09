@@ -1,7 +1,10 @@
 use endl_core::cli::CliRequest;
 use endl_core::aria2::{find_aria2c, Aria2Config, Aria2Engine};
 use endl_core::db::Db;
+use endl_core::media::{MediaEngine, MediaPrefs};
 use endl_core::scheduler::{Engines, Scheduler, SchedulerHandle};
+use endl_core::tools::Tools;
+use tauri::Manager;
 use endl_core::settings::Settings;
 use parking_lot::{Mutex, RwLock};
 use std::path::PathBuf;
@@ -14,6 +17,10 @@ pub struct AppState {
     pub queue: SchedulerHandle,
     /// aria2c in use, if found (shown in diagnostics).
     pub aria2_path: Option<PathBuf>,
+    /// yt-dlp, FFmpeg, JS runtime, gallery-dl.
+    pub tools: Tools,
+    /// Serializes tool installs (two analyses must not download yt-dlp twice).
+    pub tool_install: tokio::sync::Mutex<()>,
     pub settings: RwLock<Settings>,
     /// Command-line request from this launch, taken once by the UI when it is ready.
     pub launch: Mutex<Option<CliRequest>>,
@@ -43,11 +50,19 @@ impl AppState {
             None => log::warn!("aria2c not found; file downloads will fail until it is installed"),
         }
         let aria2 = Aria2Engine::new(Aria2Config::new(aria2_path.clone().unwrap_or_else(|| PathBuf::from("aria2c"))));
-        let (scheduler, queue) = Scheduler::new(db.clone(), Engines::new(vec![aria2]), Arc::new(crate::queue::UiNotifier(app.clone())), crate::queue::run_config_source(app.clone()));
+        let tools = Tools::new(data_dir.join("tools"));
+        let prefs_app = app.clone();
+        let media = MediaEngine::new(
+            tools.clone(),
+            Arc::new(move || prefs_app.try_state::<AppState>().map(|s| MediaPrefs { cookies_browser: s.settings.read().cookies_browser.clone() }).unwrap_or_default()),
+        );
+        let (scheduler, queue) = Scheduler::new(db.clone(), Engines::new(vec![aria2, media]), Arc::new(crate::queue::UiNotifier(app.clone())), crate::queue::run_config_source(app.clone()));
         let state = Self {
             db,
             queue,
             aria2_path,
+            tools,
+            tool_install: tokio::sync::Mutex::new(()),
             settings: RwLock::new(settings),
             launch: Mutex::new(None),
             quitting: AtomicBool::new(false),

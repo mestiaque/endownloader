@@ -1,6 +1,13 @@
 /** Typed wrappers around the Rust commands. One function per command. */
 import { invoke } from "@tauri-apps/api/core";
-import type { AddResult, AppPaths, CliRequest, Settings, Task } from "./types";
+import type { AddResult, AppPaths, CliRequest, MediaInfo, MediaOption, Settings, Task, ToolInfo } from "./types";
+
+export interface MediaItem {
+  url: string;
+  title?: string | null;
+  thumbnail?: string | null;
+  mediaId?: string | null;
+}
 
 export type TaskAction = "pause" | "resume" | "cancel" | "retry";
 
@@ -14,6 +21,10 @@ export const api = {
   listTasks: () => invoke<Task[]>("list_tasks"),
   addLinks: (text: string, opts: { folder?: string | null; quality?: string | null; allowDuplicates?: boolean } = {}) =>
     invoke<AddResult>("add_links", { text, folder: opts.folder ?? null, quality: opts.quality ?? null, allowDuplicates: opts.allowDuplicates ?? false }),
+  analyzeUrl: (url: string, playlist = false) => invoke<MediaInfo>("analyze_url", { url, playlist }),
+  addMedia: (items: MediaItem[], option: MediaOption, folder?: string | null) => invoke<Task[]>("add_media", { items, option, folder: folder ?? null }),
+  toolsStatus: () => invoke<ToolInfo[]>("tools_status"),
+  installTool: (id: string) => invoke<ToolInfo>("install_tool", { id }),
   importLinks: (path: string) => invoke<AddResult>("import_links", { path }),
   clearCompleted: () => invoke<number>("clear_completed"),
   taskAction: (ids: number[], action: TaskAction) => invoke<Task[]>("task_action", { ids, action }),

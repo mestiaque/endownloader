@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { byPosition, inView, matchesSearch, type ViewId } from "../engines/taskView";
 import { api, errorMessage, type TaskAction } from "../lib/api";
 import type { AddResult, ProgressItem, Task } from "../lib/types";
+import { useAnalyze } from "./analyze";
 import { useSettings } from "./settings";
 import { confirmDialog, toast } from "./ui";
 
@@ -177,9 +178,10 @@ function reportAdded(r: AddResult, opts: { folder?: string | null; quality?: str
         8000,
       );
     }
+    if (r.media.length) useAnalyze.getState().analyze(r.media);
     if (r.invalid.length) toast({ kind: "error", title: `${r.invalid.length} invalid link(s) skipped`, detail: r.invalid.slice(0, 3).join("\n") });
-    if (!r.added.length && !r.duplicates.length && !r.invalid.length) toast({ kind: "info", title: "No links found", detail: "Paste one or more links (http, https, ftp or magnet)." });
-    return r.added.length;
+    if (!r.added.length && !r.duplicates.length && !r.invalid.length && !r.media.length) toast({ kind: "info", title: "No links found", detail: "Paste one or more links (http, https, ftp or magnet)." });
+    return r.added.length + r.media.length;
   }
 }
 

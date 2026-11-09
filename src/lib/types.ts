@@ -26,6 +26,55 @@ export interface Task {
   options: unknown;
 }
 
+/** One row of the Video / Audio table of an analysed link. */
+export interface MediaOption {
+  kind: "video" | "audio";
+  label: string;
+  ext: string;
+  resolution: string | null;
+  height: number | null;
+  fps: number | null;
+  codecs: string | null;
+  size: number | null;
+  sizeEstimated: boolean;
+  format: string;
+  merge: string | null;
+  extractAudio: string | null;
+}
+
+export interface PlaylistEntry {
+  id: string;
+  title: string;
+  url: string;
+  duration: number | null;
+  thumbnail: string | null;
+}
+
+export interface MediaInfo {
+  url: string;
+  id: string;
+  title: string;
+  thumbnail: string | null;
+  duration: number | null;
+  uploader: string | null;
+  platform: string;
+  isLive: boolean;
+  description: string | null;
+  video: MediaOption[];
+  audio: MediaOption[];
+  entries: PlaylistEntry[];
+  isPlaylist: boolean;
+  playlistId: string | null;
+}
+
+export interface ToolInfo {
+  id: "yt-dlp" | "ffmpeg" | "deno" | "node" | "gallery-dl";
+  path: string | null;
+  version: string | null;
+  managed: boolean;
+  installable: boolean;
+}
+
 /** Live progress batch item (`tasks-progress` event). */
 export interface ProgressItem {
   id: number;
@@ -57,6 +106,8 @@ export interface Settings {
   useCategories: boolean;
   keepPartial: boolean;
   retries: number;
+  mediaQuality: "best" | "2160" | "1440" | "1080" | "720" | "480" | "360" | "audio" | "mp3";
+  cookiesBrowser: "" | "firefox" | "chrome" | "chromium" | "edge" | "brave" | "opera" | "vivaldi";
   categories: Category[];
   theme: "dark" | "light" | "glass" | "system";
   accent: string;
@@ -69,6 +120,8 @@ export interface AddResult {
   added: Task[];
   duplicates: string[];
   invalid: string[];
+  /** Media-site links: shown as analysis cards so the user can pick a format. */
+  media: string[];
 }
 
 export interface CliRequest {

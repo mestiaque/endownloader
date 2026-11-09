@@ -68,6 +68,12 @@ function menuFor(t: Task): MenuEntry[] {
   ];
 }
 
+/** Media tasks keep the video thumbnail from the analysis. */
+function thumbOf(t: Task): string | null {
+  const o = t.options as { thumbnail?: unknown } | null;
+  return o && typeof o.thumbnail === "string" && o.thumbnail.startsWith("https://") ? o.thumbnail : null;
+}
+
 const TaskRow = memo(function TaskRow({ t, selected, focused, onClick }: { t: Task; selected: boolean; focused: boolean; onClick: (e: React.MouseEvent, t: Task) => void }) {
   const eta = etaSeconds(t);
   const running = t.status === "active" || t.status === "starting";
@@ -85,9 +91,13 @@ const TaskRow = memo(function TaskRow({ t, selected, focused, onClick }: { t: Ta
         )}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", t.status === "failed" ? "bg-danger/10 text-danger" : t.status === "completed" ? "bg-success/10 text-success" : "bg-accent/10 text-accent")}>
-            <CategoryIcon id={t.category} />
-          </div>
+          {thumbOf(t) ? (
+            <img src={thumbOf(t)!} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-8 w-[52px] shrink-0 rounded-md border border-line object-cover" />
+          ) : (
+            <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", t.status === "failed" ? "bg-danger/10 text-danger" : t.status === "completed" ? "bg-success/10 text-success" : "bg-accent/10 text-accent")}>
+              <CategoryIcon id={t.category} />
+            </div>
+          )}
           <div className="min-w-0">
             <div className="truncate text-[13px] font-medium" title={displayName(t)}>
               {displayName(t)}

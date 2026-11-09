@@ -3,7 +3,7 @@ mod queue;
 mod state;
 mod tray;
 
-use commands::{settings, system, tasks};
+use commands::{media, settings, system, tasks};
 use endl_core::cli::{parse_args, CliRequest};
 use endl_core::mask::mask_secrets;
 use state::AppState;
@@ -120,6 +120,10 @@ pub fn run() {
             settings::reset_settings,
             settings::export_settings,
             settings::import_settings,
+            media::analyze_url,
+            media::add_media,
+            media::tools_status,
+            media::install_tool,
             tasks::list_tasks,
             tasks::add_links,
             tasks::import_links,

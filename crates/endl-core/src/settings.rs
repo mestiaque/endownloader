@@ -56,6 +56,13 @@ pub struct Settings {
     /// Automatic retries for network errors (with growing waits).
     pub retries: u32,
     pub categories: Vec<Category>,
+    // Media
+    /// Quality used without the analysis card (command line, playlists): "best", "2160",
+    /// "1440", "1080", "720", "480", "360", "audio", "mp3".
+    pub media_quality: String,
+    /// yt-dlp `--cookies-from-browser`: "", "firefox", "chrome", "chromium", "edge", "brave",
+    /// "opera", "vivaldi". Cookies are read from the browser when needed, never stored.
+    pub cookies_browser: String,
     // Appearance
     /// "dark" | "light" | "glass" | "system"
     pub theme: String,
@@ -82,6 +89,8 @@ impl Default for Settings {
             keep_partial: false,
             retries: 3,
             categories: default_categories(),
+            media_quality: "best".into(),
+            cookies_browser: String::new(),
             theme: "dark".into(),
             accent: "#3b82f6".into(),
             animations: true,
@@ -125,6 +134,12 @@ impl Settings {
         }
         if !matches!(self.theme.as_str(), "dark" | "light" | "glass" | "system") {
             self.theme = "dark".into();
+        }
+        if !matches!(self.media_quality.as_str(), "best" | "2160" | "1440" | "1080" | "720" | "480" | "360" | "audio" | "mp3") {
+            self.media_quality = "best".into();
+        }
+        if !matches!(self.cookies_browser.as_str(), "" | "firefox" | "chrome" | "chromium" | "edge" | "brave" | "opera" | "vivaldi" | "safari") {
+            self.cookies_browser = String::new();
         }
         if !matches!(self.language.as_str(), "en" | "bn") {
             self.language = "en".into();

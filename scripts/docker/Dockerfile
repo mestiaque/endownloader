@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential curl ca-certificates git pkg-config file patchelf cmake \
       libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev \
-      libsecret-1-dev aria2 python3 \
+      libsecret-1-dev aria2 python3 ffmpeg \
       gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav \
       xvfb xdotool imagemagick dbus-x11 fonts-dejavu-core fonts-noto-core at-spi2-core \
     && rm -rf /var/lib/apt/lists/*

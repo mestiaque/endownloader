@@ -1,6 +1,7 @@
 //! Tauri commands, one module per area. Every command returns `Result<_, DlError>`, which
 //! reaches the UI as `{ kind, message }`.
 
+pub mod media;
 pub mod settings;
 pub mod system;
 pub mod tasks;

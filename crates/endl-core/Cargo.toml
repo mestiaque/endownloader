@@ -11,11 +11,15 @@ serde_json = "1"
 thiserror = "2"
 async-trait = "0.1"
 tokio = { version = "1", features = ["sync", "rt", "macros", "time", "process", "io-util", "net"] }
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sha2 = "0.10"
 rusqlite = { version = "0.32", features = ["bundled"] }
 url = "2"
 log = "0.4"
 parking_lot = "0.12"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["signal", "process"] }
 
 [dev-dependencies]
 tempfile = "3"

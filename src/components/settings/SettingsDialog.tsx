@@ -4,7 +4,7 @@ import { Check, Copy, FolderOpen, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { cn } from "../../lib/format";
-import type { AppPaths, Category, Settings } from "../../lib/types";
+import type { AppPaths, Category, Settings, ToolInfo } from "../../lib/types";
 import { useSettings } from "../../store/settings";
 import { confirmDialog, toast, useUi } from "../../store/ui";
 import { Dialog } from "../ui/overlays";
@@ -16,6 +16,8 @@ const SECTIONS = [
   ["general", "General"],
   ["downloads", "Downloads"],
   ["categories", "Categories"],
+  ["media", "Media"],
+  ["tools", "Tools"],
   ["appearance", "Appearance"],
   ["logs", "Logs"],
   ["about", "About"],
@@ -304,6 +306,124 @@ function CategoriesSection() {
   );
 }
 
+function MediaSection() {
+  const { settings: s, set } = useSettings();
+  return (
+    <>
+      <div className="py-3 text-[12px] text-muted">
+        Links from YouTube, TikTok, Instagram, Facebook, X and many more sites open an analysis card where you pick the quality. These settings apply where no card is shown: the
+        command line and playlists.
+      </div>
+      <Field label="Default quality" hint="Used by the command line (endownloader &quot;link&quot;) and as the first choice for playlists">
+        <Select
+          value={s.mediaQuality}
+          onChange={(v) => void set("mediaQuality", v)}
+          options={[
+            { value: "best", label: "Best available" },
+            { value: "2160", label: "Up to 4K (2160p)" },
+            { value: "1440", label: "Up to 1440p" },
+            { value: "1080", label: "Up to 1080p" },
+            { value: "720", label: "Up to 720p" },
+            { value: "480", label: "Up to 480p" },
+            { value: "360", label: "Up to 360p" },
+            { value: "audio", label: "Audio only (M4A)" },
+            { value: "mp3", label: "Audio only (MP3)" },
+          ]}
+        />
+      </Field>
+      <Field
+        label="Cookies from browser"
+        hint="For private, age-restricted or members-only media your account can see. Sign in to the site in that browser; ENDownloader reads the cookies only while downloading and never stores them."
+      >
+        <Select
+          value={s.cookiesBrowser}
+          onChange={(v) => void set("cookiesBrowser", v)}
+          options={[
+            { value: "", label: "Don't use cookies" },
+            { value: "firefox", label: "Firefox" },
+            { value: "chrome", label: "Google Chrome" },
+            { value: "chromium", label: "Chromium" },
+            { value: "edge", label: "Microsoft Edge" },
+            { value: "brave", label: "Brave" },
+            { value: "opera", label: "Opera" },
+            { value: "vivaldi", label: "Vivaldi" },
+          ]}
+        />
+      </Field>
+      <div className="py-3 text-[11px] text-faint">DRM-protected content (Netflix, Disney+, Spotify and similar) is not supported and is reported as such.</div>
+    </>
+  );
+}
+
+const TOOL_TEXT: Record<ToolInfo["id"], { name: string; what: string; missing: string }> = {
+  "yt-dlp": { name: "yt-dlp", what: "Reads media sites and downloads video and audio", missing: "Downloaded automatically the first time you add a media link" },
+  ffmpeg: { name: "FFmpeg", what: "Joins video and audio, converts to MP3", missing: "Install it with: sudo apt install ffmpeg" },
+  deno: { name: "Deno", what: "JavaScript runtime yt-dlp uses for YouTube (preferred)", missing: "Optional — Node.js is used when Deno is not installed" },
+  node: { name: "Node.js", what: "JavaScript runtime yt-dlp can use for YouTube", missing: "Optional — without Deno or Node.js some YouTube formats may be missing" },
+  "gallery-dl": { name: "gallery-dl", what: "Image galleries and photo posts", missing: "Optional — install it to download image galleries" },
+};
+
+function ToolsSection() {
+  const [tools, setTools] = useState<ToolInfo[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = () => api.toolsStatus().then(setTools, (e) => toast({ kind: "error", title: "Could not check the tools", detail: errorMessage(e) }));
+  useEffect(() => {
+    void load();
+  }, []);
+  const install = async (id: string) => {
+    setBusy(id);
+    try {
+      const t = await api.installTool(id);
+      toast({ kind: "success", title: `${TOOL_TEXT[t.id].name} ${t.version ?? ""} installed` });
+      await load();
+    } catch (e) {
+      toast({ kind: "error", title: "Install failed", detail: errorMessage(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
+  if (!tools) return <div className="py-6 text-[13px] text-muted">Checking tools…</div>;
+  return (
+    <>
+      {tools.map((t) => (
+        <Field
+          key={t.id}
+          label={`${TOOL_TEXT[t.id].name}${t.version ? ` ${t.version}` : ""}`}
+          hint={
+            t.path ? (
+              <>
+                {TOOL_TEXT[t.id].what}
+                <br />
+                <span className="font-mono">{t.path}</span>
+                {t.managed && " (installed by ENDownloader)"}
+              </>
+            ) : (
+              <>
+                <span className="text-danger">Not found.</span> {TOOL_TEXT[t.id].missing}
+              </>
+            )
+          }
+        >
+          {t.installable ? (
+            <Button size="sm" variant={t.path ? "default" : "primary"} disabled={busy !== null} onClick={() => void install(t.id)} title="Download the latest official release (checksum verified)">
+              <RefreshCw className={cn("h-3.5 w-3.5", busy === t.id && "animate-spin")} />
+              {busy === t.id ? "Downloading…" : t.managed ? "Update" : t.path ? "Install latest" : "Install"}
+            </Button>
+          ) : (
+            <span className={cn("text-[12px]", t.path ? "text-success" : "text-faint")}>{t.path ? "Found" : "—"}</span>
+          )}
+        </Field>
+      ))}
+      <div className="flex justify-end py-3">
+        <Button size="sm" variant="ghost" onClick={() => void load()}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          Check again
+        </Button>
+      </div>
+    </>
+  );
+}
+
 function AppearanceSection() {
   const { settings: s, set } = useSettings();
   return (
@@ -445,6 +565,8 @@ export function SettingsDialog() {
           {current === "general" && <GeneralSection />}
           {current === "downloads" && <DownloadsSection />}
           {current === "categories" && <CategoriesSection />}
+          {current === "media" && <MediaSection />}
+          {current === "tools" && <ToolsSection />}
           {current === "appearance" && <AppearanceSection />}
           {current === "logs" && <LogsSection />}
           {current === "about" && <AboutSection />}

@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS: Settings = {
   useCategories: true,
   keepPartial: false,
   retries: 3,
+  mediaQuality: "best",
+  cookiesBrowser: "",
   categories: [],
   theme: "dark",
   accent: "#3b82f6",

@@ -50,13 +50,15 @@
         "section": "net",
         "desktopTemplate": "endownloader.desktop",
         "depends": [
-          "aria2"
+          "aria2",
+          "ffmpeg"
         ]
       },
       "rpm": {
         "desktopTemplate": "endownloader.desktop",
         "depends": [
-          "aria2"
+          "aria2",
+          "ffmpeg"
         ]
       }
     },
