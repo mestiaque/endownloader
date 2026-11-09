@@ -1,4 +1,4 @@
-//! ENDownloader core: everything that does not need a window. Pure, unit-tested logic
+//! ENSave core: everything that does not need a window. Pure, unit-tested logic
 //! (links, file names, settings, task state machine, secret masking) plus the SQLite store
 //! and the engine trait the download engines implement.
 

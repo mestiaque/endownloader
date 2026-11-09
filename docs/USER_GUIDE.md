@@ -1,6 +1,6 @@
-# ENDownloader user guide
+# ENSave user guide
 
-ENDownloader downloads files and media from links. It can run several downloads at once,
+ENSave downloads files and media from links. It can run several downloads at once,
 keeps going in the background, and resumes after a restart or crash.
 
 ![The download list](screenshots/01-downloads.png)
@@ -8,16 +8,16 @@ keeps going in the background, and resumes after a restart or crash.
 ## Installing
 
 Get the latest version from the
-[Releases page](https://github.com/mestiaque/endownloader/releases/latest).
+[Releases page](https://github.com/mestiaque/ensave/releases/latest).
 
 | System | File | How |
 |---|---|---|
-| Ubuntu 22.04 or newer | `ENDownloader_<version>_amd64.deb` | `sudo apt install ./ENDownloader_*_amd64.deb` |
-| Any Linux | `ENDownloader_<version>_amd64.AppImage` | Make it executable (`chmod +x`), then run it |
-| Windows 10/11 | `ENDownloader_<version>_x64-setup.exe` | Run the installer (no administrator rights needed) |
-| Windows, no install | `ENDownloader-portable-windows-x64.zip` | Unzip anywhere and run `ENDownloader.exe` |
+| Ubuntu 22.04 or newer | `ENSave_<version>_amd64.deb` | `sudo apt install ./ENSave_*_amd64.deb` |
+| Any Linux | `ENSave_<version>_amd64.AppImage` | Make it executable (`chmod +x`), then run it |
+| Windows 10/11 | `ENSave_<version>_x64-setup.exe` | Run the installer (no administrator rights needed) |
+| Windows, no install | `ENSave-portable-windows-x64.zip` | Unzip anywhere and run `ENSave.exe` |
 
-You don't need to install anything else. The tools ENDownloader uses are set up for you:
+You don't need to install anything else. The tools ENSave uses are set up for you:
 
 * On Ubuntu, the `.deb` installs `aria2` and `ffmpeg`.
 * On Windows, aria2 is included.
@@ -31,10 +31,10 @@ You can add downloads in any of these ways:
   several links at once, one per line or mixed into other text.
 * **Drag and drop** links from a browser, or a `.txt` file of links, onto the window.
 * **Import a link list**: ••• → *Import links from file…*.
-* **Command line**: `endownloader "<link>" [more links] [--folder X] [--quality 1080]`.
-  If ENDownloader is already open, the links go to that window.
+* **Command line**: `ensave "<link>" [more links] [--folder X] [--quality 1080]`.
+  If ENSave is already open, the links go to that window.
 
-ENDownloader sorts each file into a category by its type (Video, Audio, Programs, ISO…).
+ENSave sorts each file into a category by its type (Video, Audio, Programs, ISO…).
 If *Sort files into category folders* is on, each category also gets its own folder.
 
 ## Videos and music from websites
@@ -42,22 +42,22 @@ If *Sort files into category folders* is on, each category also gets its own fol
 ![Choosing a quality](screenshots/02-analyze.png)
 
 When you add a link from YouTube, TikTok, Instagram, Facebook, X or another media site,
-ENDownloader opens a card for it. The card shows:
+ENSave opens a card for it. The card shows:
 
 * the thumbnail, title, length and uploader;
 * the **Video** qualities (resolution, frame rate, codecs and size);
 * the **Audio** choices: the best original audio (M4A) or **MP3**.
 
-Click **Download** next to the quality you want. ENDownloader downloads the video and audio
+Click **Download** next to the quality you want. ENSave downloads the video and audio
 and joins them into one MP4 file.
 
 * **Playlists**: if the link is part of a playlist, click **Show the whole playlist**.
   Then tick the videos you want and choose one quality for all of them.
 * **Private or members-only videos**: in Settings → Media, choose your browser under
-  *Cookies from browser*. ENDownloader then uses your sign-in from that browser. It reads the
+  *Cookies from browser*. ENSave then uses your sign-in from that browser. It reads the
   cookies only while downloading and never stores them.
 * **DRM**: protected content (Netflix, Disney+, Spotify and similar) cannot be downloaded.
-  ENDownloader tells you when a link is protected.
+  ENSave tells you when a link is protected.
 
 ## Watching your downloads
 
@@ -99,11 +99,11 @@ Right-click a download (or several) to open its menu: **Resume**, **Pause**,
 
 ## Running in the background
 
-When you close the window, ENDownloader keeps running in the system tray and your
+When you close the window, ENSave keeps running in the system tray and your
 downloads continue. Use the tray icon to show the window, pause or resume everything, or
-quit. To quit from the window, use ••• → *Quit ENDownloader*.
+quit. To quit from the window, use ••• → *Quit ENSave*.
 
-*Start with the system* (Settings → General) starts ENDownloader in the tray when you log
+*Start with the system* (Settings → General) starts ENSave in the tray when you log
 in, so queued downloads continue.
 
 ## Settings
@@ -119,11 +119,11 @@ Open Settings with `Ctrl+,` or the gear button.
 * **Categories**: which file types go into each category and folder.
 * **Media**: the default quality (for the command line and playlists) and cookies from
   your browser.
-* **Tools**: the helper programs ENDownloader uses. You normally don't need to change
+* **Tools**: the helper programs ENSave uses. You normally don't need to change
   anything here.
 * **Appearance**: the theme (Dark, Light, Glass, System) and the accent colour. The
   theme button in the toolbar switches it quickly.
-* **Logs**: what ENDownloader has been doing, useful when you report a problem.
+* **Logs**: what ENSave has been doing, useful when you report a problem.
 
 ![Download settings](screenshots/05-settings-downloads.png)
 
@@ -140,27 +140,27 @@ Open Settings with `Ctrl+,` or the gear button.
 | FFmpeg | Joins video and audio, makes MP3s | `.deb` dependency (Ubuntu), downloaded automatically (Windows) |
 | Deno or Node.js | Lets yt-dlp read YouTube | Deno is downloaded automatically if neither is installed |
 
-Every tool ENDownloader downloads comes from its official release and is checked against
+Every tool ENSave downloads comes from its official release and is checked against
 its published SHA-256 checksum before it is used.
 
 ## Updates
 
-ENDownloader checks GitHub for a new version about once a day. When one is available, it
+ENSave checks GitHub for a new version about once a day. When one is available, it
 shows a message with an **Update** button. The update downloads, is checksum-verified and
 installs in place:
 
 * `.deb`: Ubuntu asks for your password.
 * AppImage: the file is replaced.
-* Windows installer: the update installs silently and ENDownloader restarts.
+* Windows installer: the update installs silently and ENSave restarts.
 
 Your downloads, queue and settings are kept. To check now, use Settings → General →
 **Check now**. You can turn the automatic check off there too.
 
-The portable Windows zip updates itself too: the new version is unpacked and copied over the folder when ENDownloader restarts (your `data` folder is kept).
+The portable Windows zip updates itself too: the new version is unpacked and copied over the folder when ENSave restarts (your `data` folder is kept).
 
 ## Privacy
 
-ENDownloader only connects to:
+ENSave only connects to:
 
 * the links you add;
 * GitHub, to check for its own updates and to download yt-dlp, Deno and FFmpeg.

@@ -65,7 +65,7 @@ pub struct ToolInfo {
     pub id: &'static str,
     pub path: Option<String>,
     pub version: Option<String>,
-    /// Installed by ENDownloader (in its tools folder), so it can be updated from the app.
+    /// Installed by ENSave (in its tools folder), so it can be updated from the app.
     pub managed: bool,
     /// The app can download/update this tool itself.
     pub installable: bool,
@@ -431,7 +431,7 @@ fn hex(bytes: &[u8]) -> String {
 
 fn http_client() -> Result<reqwest::Client, DlError> {
     reqwest::Client::builder()
-        .user_agent(concat!("ENDownloader/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("ENSave/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(20))
         .timeout(Duration::from_secs(600))
         .build()

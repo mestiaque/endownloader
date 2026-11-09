@@ -121,11 +121,11 @@ function GeneralSection() {
   const replace = useSettings((s) => s.replace);
   return (
     <>
-      <Toggle k="startWithOs" label="Start with the system" hint="ENDownloader starts in the tray when you log in, so queued downloads continue" />
+      <Toggle k="startWithOs" label="Start with the system" hint="ENSave starts in the tray when you log in, so queued downloads continue" />
       <Toggle k="startMinimized" label="Start minimized to the tray" />
       <Toggle k="closeToTray" label="Keep running in the tray when the window is closed" hint="Downloads continue in the background. Quit from the tray menu" />
       <Toggle k="confirmRemove" label="Confirm before removing downloads from the list" />
-      <Toggle k="checkUpdates" label="Check for updates automatically" hint="Looks for a new ENDownloader release on GitHub once a day" />
+      <Toggle k="checkUpdates" label="Check for updates automatically" hint="Looks for a new ENSave release on GitHub once a day" />
       <UpdateRow />
       <Field label="Settings file" hint="Move your settings to another computer">
         <div className="flex gap-2">
@@ -147,7 +147,7 @@ function GeneralSection() {
           <Button
             size="sm"
             onClick={async () => {
-              const p = await saveDialog({ defaultPath: "endownloader-settings.json", filters: [{ name: "Settings", extensions: ["json"] }] });
+              const p = await saveDialog({ defaultPath: "ensave-settings.json", filters: [{ name: "Settings", extensions: ["json"] }] });
               if (!p) return;
               try {
                 await api.exportSettings(p);
@@ -334,7 +334,7 @@ function MediaSection() {
         Links from YouTube, TikTok, Instagram, Facebook, X and many more sites open an analysis card where you pick the quality. These settings apply where no card is shown: the
         command line and playlists.
       </div>
-      <Field label="Default quality" hint="Used by the command line (endownloader &quot;link&quot;) and as the first choice for playlists">
+      <Field label="Default quality" hint="Used by the command line (ensave &quot;link&quot;) and as the first choice for playlists">
         <Select
           value={s.mediaQuality}
           onChange={(v) => void set("mediaQuality", v)}
@@ -353,7 +353,7 @@ function MediaSection() {
       </Field>
       <Field
         label="Cookies from browser"
-        hint="For private, age-restricted or members-only media your account can see. Sign in to the site in that browser; ENDownloader reads the cookies only while downloading and never stores them."
+        hint="For private, age-restricted or members-only media your account can see. Sign in to the site in that browser; ENSave reads the cookies only while downloading and never stores them."
       >
         <Select
           value={s.cookiesBrowser}
@@ -421,7 +421,7 @@ function ToolsSection() {
                 {TOOL_TEXT[t.id].what}
                 <br />
                 <span className="font-mono">{t.path}</span>
-                {t.managed && " (installed by ENDownloader)"}
+                {t.managed && " (installed by ENSave)"}
               </>
             ) : (
               <>

@@ -1,4 +1,4 @@
-# Reproducible Ubuntu 22.04 build (and headless test) environment for ENDownloader.
+# Reproducible Ubuntu 22.04 build (and headless test) environment for ENSave.
 #   docker build -t endl-build scripts/docker
 #   docker run --rm -v "$PWD":/src -w /src endl-build scripts/build-linux.sh
 FROM ubuntu:22.04

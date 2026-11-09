@@ -9,7 +9,7 @@ mkdir -p "$XDG_RUNTIME_DIR" "$HOME/Downloads" && chmod 700 "$XDG_RUNTIME_DIR"
 Xvfb :99 -screen 0 1280x720x24 >/dev/null 2>&1 &
 export DISPLAY=:99
 sleep 1
-BIN=/src/target/debug/endownloader
+BIN=/src/target/debug/ensave
 "$BIN" "https://releases.ubuntu.com/24.04/ubuntu-24.04.1-desktop-amd64.iso" --folder /tmp/home/Downloads/isos >"$OUT/app.log" 2>&1 &
 APP=$!
 sleep 6
@@ -18,7 +18,7 @@ timeout 10 "$BIN" "example.com/files/report.pdf" "https://youtu.be/dQw4w9WgXcQ" 
 echo "second instance exit code: $?"
 sleep 2
 import -window root "$OUT/main.png"
-xdotool search --name ENDownloader | head -1 > "$OUT/wid.txt"
+xdotool search --name ENSave | head -1 > "$OUT/wid.txt"
 # Open settings with Ctrl+,
 WID=$(cat "$OUT/wid.txt")
 eval "$(xdotool getwindowgeometry --shell "$WID")"
@@ -41,4 +41,4 @@ if kill -0 $APP 2>/dev/null; then echo "still running after window close: yes"; 
 kill $APP 2>/dev/null; sleep 1
 echo "--- app log ---"; cat "$OUT/app.log" | tail -20
 echo "--- db ---"
-ls -la /tmp/home/.local/share/com.mestiaque.endownloader/ 2>&1
+ls -la /tmp/home/.local/share/com.mestiaque.ensave/ 2>&1

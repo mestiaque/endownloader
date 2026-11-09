@@ -72,7 +72,7 @@ pub fn diagnostics(app: AppHandle, state: State<AppState>) -> Result<String> {
     let tasks = state.db.list_tasks()?;
     let count = |st: TaskStatus| tasks.iter().filter(|t| t.status == st).count();
     let mut out = String::new();
-    out.push_str(&format!("ENDownloader {}\n", app.package_info().version));
+    out.push_str(&format!("ENSave {}\n", app.package_info().version));
     out.push_str(&format!("OS: {} {} ({})\n", std::env::consts::OS, os_version(), std::env::consts::ARCH));
     out.push_str(&format!("Portable: {}\n", state.portable));
     out.push_str(&format!("aria2c: {}\n", state.aria2_path.as_ref().map_or_else(|| "not found".to_string(), |p| p.display().to_string())));

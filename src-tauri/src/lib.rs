@@ -49,8 +49,8 @@ fn handle_second_instance(app: &tauri::AppHandle, argv: Vec<String>) {
 pub fn run() {
     let portable = state::portable_data_dir();
     let log_target = match &portable {
-        Some(dir) => tauri_plugin_log::TargetKind::Folder { path: dir.join("logs"), file_name: Some("endownloader".into()) },
-        None => tauri_plugin_log::TargetKind::LogDir { file_name: Some("endownloader".into()) },
+        Some(dir) => tauri_plugin_log::TargetKind::Folder { path: dir.join("logs"), file_name: Some("ensave".into()) },
+        None => tauri_plugin_log::TargetKind::LogDir { file_name: Some("ensave".into()) },
     };
 
     let result = tauri::Builder::default()
@@ -86,6 +86,7 @@ pub fn run() {
                 Some(d) => d.join("logs"),
                 None => app.path().app_log_dir()?,
             };
+            state::migrate_from_endownloader(&data_dir, portable.is_some());
             let downloads = app.path().download_dir().or_else(|_| app.path().home_dir().map(|h| h.join("Downloads")))?;
             let (state, scheduler) = AppState::new(app.handle(), data_dir, log_dir, downloads, portable.is_some()).map_err(|e| Box::new(std::io::Error::other(e.to_string())))?;
 
@@ -93,6 +94,10 @@ pub fn run() {
             let hidden = launch.minimized || state.settings.read().start_minimized;
             if !launch.is_empty() {
                 *state.launch.lock() = Some(launch);
+            }
+            // Re-register "start with the system" under the new name (ENDownloader → ENSave).
+            if state.settings.read().start_with_os {
+                let _ = commands::settings::apply_autostart(app.handle(), true);
             }
             app.manage(state);
             tauri::async_runtime::spawn(scheduler.run());
@@ -102,7 +107,7 @@ pub fn run() {
             if !hidden {
                 tray::show_main(app.handle());
             }
-            log::info!("ENDownloader {} started{}", app.package_info().version, if hidden { " in the tray" } else { "" });
+            log::info!("ENSave {} started{}", app.package_info().version, if hidden { " in the tray" } else { "" });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -159,7 +164,7 @@ pub fn run() {
             }
         }),
         Err(e) => {
-            eprintln!("ENDownloader could not start: {e}");
+            eprintln!("ENSave could not start: {e}");
             std::process::exit(1);
         }
     }

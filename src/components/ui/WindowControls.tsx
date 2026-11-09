@@ -5,7 +5,7 @@ import { cn } from "../../lib/format";
 
 const win = () => getCurrentWindow();
 
-/** Minimise / maximise / close for ENDownloader's frameless window. */
+/** Minimise / maximise / close for ENSave's frameless window. */
 export function WindowControls({ dark = false }: { dark?: boolean }) {
   const [maximized, setMaximized] = useState(false);
   useEffect(() => {

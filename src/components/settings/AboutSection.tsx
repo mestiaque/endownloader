@@ -1,7 +1,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { Copy, ExternalLink, FolderOpen } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import appIcon from "../../assets/endownloader-icon.svg";
+import appIcon from "../../assets/ensave-icon.svg";
 import { api, errorMessage } from "../../lib/api";
 import type { AppPaths, ToolInfo } from "../../lib/types";
 import { toast } from "../../store/ui";
@@ -70,7 +70,7 @@ export function AboutSection() {
         <img src={appIcon} alt="" className="h-16 w-16" draggable={false} />
         <div>
           <div className="text-lg font-semibold">
-            ENDownloader <span className="font-normal text-muted">{version}</span>
+            ENSave <span className="font-normal text-muted">{version}</span>
           </div>
           <div className="text-muted">A fast download manager for files and media.</div>
           <div className="mt-1 text-[11px] text-faint">Parallel downloads that survive restarts, and media from YouTube, TikTok, Instagram and more.</div>

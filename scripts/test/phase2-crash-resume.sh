@@ -10,9 +10,9 @@ PORT=8765
 rm -rf "$OUT" /tmp/p2home && mkdir -p "$OUT"
 export HOME=/tmp/p2home XDG_RUNTIME_DIR=/tmp/p2home/run XDG_DATA_HOME=/tmp/p2home/.local/share XDG_CONFIG_HOME=/tmp/p2home/.config
 mkdir -p "$XDG_RUNTIME_DIR" "$HOME/Downloads" && chmod 700 "$XDG_RUNTIME_DIR"
-DB="$XDG_DATA_HOME/com.mestiaque.endownloader/endownloader.db"
+DB="$XDG_DATA_HOME/com.mestiaque.ensave/ensave.db"
 DL="$HOME/Downloads/big"
-BIN=/src/target/debug/endownloader
+BIN=/src/target/debug/ensave
 SRV=/src/scripts/test/range_server.py
 
 Xvfb :98 -screen 0 1280x720x24 >/dev/null 2>&1 &

@@ -1,7 +1,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
-import appIcon from "../../assets/endownloader-icon.svg";
+import appIcon from "../../assets/ensave-icon.svg";
 import { api, errorMessage } from "../../lib/api";
 import { formatBytes } from "../../lib/format";
 import { useUpdate } from "../../store/update";
@@ -57,7 +57,7 @@ export function UpdateDialog() {
         <div className="flex items-center gap-3.5">
           <img src={appIcon} alt="" className="h-14 w-14" draggable={false} />
           <div>
-            <div className="text-[16px] font-semibold">ENDownloader {info.version} is available</div>
+            <div className="text-[16px] font-semibold">ENSave {info.version} is available</div>
             <div className="text-[12px] text-faint">You have version {version}.</div>
           </div>
         </div>
@@ -80,12 +80,12 @@ export function UpdateDialog() {
         )}
         <div className="text-[12px] text-faint">
           {phase === "error" && <span className="text-red-400">{error}</span>}
-          {phase === "installed" && `ENDownloader ${info.version} is installed. Restart to use it.`}
-          {phase === "exiting" && "Installing… ENDownloader will restart by itself."}
+          {phase === "installed" && `ENSave ${info.version} is installed. Restart to use it.`}
+          {phase === "exiting" && "Installing… ENSave will restart by itself."}
           {phase === "idle" &&
             (info.installable
               ? "The update downloads and installs in place; your downloads, queue and settings are kept. Running downloads continue after the restart."
-              : "This is a development build, so it cannot update itself. Copies installed from the ENDownloader installer, .deb, AppImage or portable zip update in place.")}
+              : "This is a development build, so it cannot update itself. Copies installed from the ENSave installer, .deb, AppImage or portable zip update in place.")}
         </div>
         <div className="flex justify-end gap-2">
           {phase === "installed" ? (

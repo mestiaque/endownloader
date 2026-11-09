@@ -7,14 +7,14 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager};
 
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open ENDownloader", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open ENSave", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause-all", "Pause all", true, None::<&str>)?;
     let resume = MenuItem::with_id(app, "resume-all", "Resume all", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &PredefinedMenuItem::separator(app)?, &pause, &resume, &PredefinedMenuItem::separator(app)?, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("main")
-        .tooltip("ENDownloader")
+        .tooltip("ENSave")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

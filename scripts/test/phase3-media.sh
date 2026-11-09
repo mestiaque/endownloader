@@ -9,8 +9,8 @@ LINK="${LINK:-https://www.youtube.com/watch?v=mk48xRzuNvA&list=RDmk48xRzuNvA&sta
 rm -rf "$OUT" /tmp/p3home && mkdir -p "$OUT"
 export HOME=/tmp/p3home XDG_RUNTIME_DIR=/tmp/p3home/run XDG_DATA_HOME=/tmp/p3home/.local/share XDG_CONFIG_HOME=/tmp/p3home/.config
 mkdir -p "$XDG_RUNTIME_DIR" "$HOME/Downloads" && chmod 700 "$XDG_RUNTIME_DIR"
-DB="$XDG_DATA_HOME/com.mestiaque.endownloader/endownloader.db"
-BIN=/src/target/debug/endownloader
+DB="$XDG_DATA_HOME/com.mestiaque.ensave/ensave.db"
+BIN=/src/target/debug/ensave
 APP=
 trap 'kill $APP 2>/dev/null; pkill -f "Xvfb :97" 2>/dev/null; pkill -f yt-dlp 2>/dev/null' EXIT
 Xvfb :97 -screen 0 1280x720x24 >/dev/null 2>&1 &

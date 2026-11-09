@@ -3,7 +3,7 @@ name = "endl-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "ENDownloader core: queue, database, settings, engines, link parsing"
+description = "ENSave core: queue, database, settings, engines, link parsing"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

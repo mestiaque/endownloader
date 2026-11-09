@@ -41,7 +41,7 @@ pub struct Aria2Config {
 
 impl Aria2Config {
     pub fn new(binary: PathBuf) -> Self {
-        Self { binary, user_agent: format!("Mozilla/5.0 (compatible; ENDownloader/{})", env!("CARGO_PKG_VERSION")), stop_with_pid: Some(std::process::id()) }
+        Self { binary, user_agent: format!("Mozilla/5.0 (compatible; ENSave/{})", env!("CARGO_PKG_VERSION")), stop_with_pid: Some(std::process::id()) }
     }
 }
 

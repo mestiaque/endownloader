@@ -6,7 +6,7 @@ import { useSettings } from "../../store/settings";
 import { useTasks } from "../../store/tasks";
 import { Tip } from "../ui/primitives";
 import { CategoryIcon } from "../tasks/categoryIcon";
-import appIcon from "../../assets/endownloader-icon.svg";
+import appIcon from "../../assets/ensave-icon.svg";
 
 function Row({ icon, label, active, onClick, collapsed, count, tone }: { icon: ReactNode; label: string; active?: boolean; onClick: () => void; collapsed: boolean; count?: number; tone?: "danger" }) {
   const btn = (
@@ -72,7 +72,7 @@ export function Sidebar() {
     <aside className={cn("flex shrink-0 flex-col border-r border-line bg-panel transition-[width] duration-200", collapsed ? "w-[52px]" : "w-[220px]")}>
       <div className={cn("flex h-12 items-center gap-2 px-4", collapsed && "justify-center px-0")}>
         <img src={appIcon} alt="" className="h-6 w-6 shrink-0" draggable={false} />
-        {!collapsed && <span className="text-[14px] font-semibold tracking-tight">ENDownloader</span>}
+        {!collapsed && <span className="text-[14px] font-semibold tracking-tight">ENSave</span>}
       </div>
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         <Section title="Downloads" collapsed={collapsed}>

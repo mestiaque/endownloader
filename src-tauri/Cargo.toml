@@ -1,13 +1,13 @@
 [package]
-name = "endownloader"
+name = "ensave"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "ENDownloader – a fast download manager for files and media"
-default-run = "endownloader"
+description = "ENSave – a fast download manager for files and media"
+default-run = "ensave"
 
 [lib]
-name = "endownloader_lib"
+name = "ensave_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

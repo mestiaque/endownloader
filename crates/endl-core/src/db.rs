@@ -82,7 +82,7 @@ impl Db {
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
         let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         if version > SCHEMA_VERSION {
-            return Err(DlError::Db(format!("database was created by a newer ENDownloader (schema {version})")));
+            return Err(DlError::Db(format!("database was created by a newer ENSave (schema {version})")));
         }
         if version < 1 {
             conn.execute_batch(

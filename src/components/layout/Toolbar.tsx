@@ -143,7 +143,7 @@ export function Toolbar() {
           { label: "Keyboard shortcuts", icon: <Keyboard className="h-3.5 w-3.5" />, shortcut: "?", onSelect: () => useUi.getState().openDialog("shortcuts") },
           { separator: true },
           { label: "Hide to tray", onSelect: () => void api.hideToTray() },
-          { label: "Quit ENDownloader", danger: true, onSelect: () => void api.quitApp() },
+          { label: "Quit ENSave", danger: true, onSelect: () => void api.quitApp() },
         ]}
       />
       <IconButton label="Settings" shortcut="Ctrl+," onClick={() => useUi.getState().openDialog("settings")}>

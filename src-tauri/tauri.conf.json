@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ENDownloader",
-  "mainBinaryName": "endownloader",
-  "version": "0.1.5",
-  "identifier": "com.mestiaque.endownloader",
+  "productName": "ENSave",
+  "mainBinaryName": "ensave",
+  "version": "0.2.0",
+  "identifier": "com.mestiaque.ensave",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "ENDownloader",
+        "title": "ENSave",
         "width": 1280,
         "height": 800,
         "minWidth": 900,
@@ -36,7 +36,7 @@
     "publisher": "M. Estiaque Ahmed Khan",
     "category": "Utility",
     "shortDescription": "Fast download manager for files and media",
-    "longDescription": "ENDownloader downloads files and media from links, in parallel and in the background, with resume after restarts.",
+    "longDescription": "ENSave downloads files and media from links, in parallel and in the background, with resume after restarts.",
     "copyright": "© 2026 M. Estiaque Ahmed Khan · MIT License",
     "icon": [
       "icons/32x32.png",
@@ -48,14 +48,23 @@
     "linux": {
       "deb": {
         "section": "net",
-        "desktopTemplate": "endownloader.desktop",
+        "desktopTemplate": "ensave.desktop",
         "depends": [
           "aria2",
           "ffmpeg"
+        ],
+        "replaces": [
+          "en-downloader"
+        ],
+        "conflicts": [
+          "en-downloader"
+        ],
+        "provides": [
+          "en-downloader"
         ]
       },
       "rpm": {
-        "desktopTemplate": "endownloader.desktop",
+        "desktopTemplate": "ensave.desktop",
         "depends": [
           "aria2",
           "ffmpeg"

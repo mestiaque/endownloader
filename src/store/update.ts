@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { api, errorMessage, type UpdateInfo } from "../lib/api";
 import { toast } from "./ui";
 
-const LAST_CHECK_KEY = "endownloader.lastUpdateCheck";
+const LAST_CHECK_KEY = "ensave.lastUpdateCheck";
 // A little under a day, so a computer started at about the same time every day still checks daily.
 const DAY = 20 * 3600 * 1000;
 
@@ -41,8 +41,8 @@ export const useUpdate = create<UpdateStore>((set, get) => ({
       set({ available: info });
       if (!info) return "You have the latest version";
       if (manual) set({ dialogOpen: true });
-      else toast({ kind: "info", title: `ENDownloader ${info.version} is available`, action: { label: "Update", run: () => get().open() } }, 30000);
-      return `ENDownloader ${info.version} is available`;
+      else toast({ kind: "info", title: `ENSave ${info.version} is available`, action: { label: "Update", run: () => get().open() } }, 30000);
+      return `ENSave ${info.version} is available`;
     } catch (e) {
       const msg = "Could not check for updates. Are you online?";
       if (manual) toast({ kind: "error", title: msg, detail: errorMessage(e) });

@@ -1,9 +1,14 @@
-# ENDownloader
+# ENSave
 
 A fast download manager for **Ubuntu** and **Windows**: files of any type and media from
 sites (YouTube, TikTok, Instagram… via yt-dlp), singly or in bulk, in parallel and in the
 background, with resume after restarts and crashes. Built with Tauri 2, Rust and React.
 Sister apps: **ENViewer** (images) and **ENPlayer** (video and music); same look and settings.
+
+> **Formerly ENDownloader.** Since 0.2.0 the app is called ENSave. Updating keeps your queue,
+> history, settings and helper tools: the old data folder (`com.mestiaque.endownloader`) moves to
+> `com.mestiaque.ensave` on first start, and the `en-save` package replaces `en-downloader`.
+> Copies of ENDownloader 0.1.x find the update through their own update check.
 
 Status: **Phase 2** is done. The aria2 engine downloads files over several connections, with a
 queue that runs several downloads at once, pause/resume, automatic retries, and resume after a
@@ -15,13 +20,13 @@ table) and download the chosen format; playlists can be downloaded in bulk. How 
 aria2: on Ubuntu the `.deb` depends on the `aria2` package; Windows bundles the official
 `aria2c.exe` (fetched with a checksum check by `scripts/fetch-sidecars.sh`).
 
-![ENDownloader](docs/screenshots/01-downloads.png)
+![ENSave](docs/screenshots/01-downloads.png)
 
 How to use it: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
 ## Install and uninstall
 
-ENDownloader is published as GitHub releases. The commands below always fetch the **latest** version, so
+ENSave is published as GitHub releases. The commands below always fetch the **latest** version, so
 they work on any computer with an internet connection. Installed copies then update themselves
 (Settings → General → *Check for updates*).
 
@@ -31,12 +36,12 @@ Open a terminal (**Ctrl+Alt+T**) and paste:
 
 ```bash
 sudo apt update && sudo apt install -y curl
-URL=$(curl -fsSL https://api.github.com/repos/mestiaque/endownloader/releases/latest | grep -o 'https://[^"]*_amd64\.deb' | head -1)
-curl -fL -o /tmp/endownloader.deb "$URL"
-sudo apt install -y /tmp/endownloader.deb
+URL=$(curl -fsSL https://api.github.com/repos/mestiaque/ensave/releases/latest | grep -o 'https://[^"]*_amd64\.deb' | head -1)
+curl -fL -o /tmp/ensave.deb "$URL"
+sudo apt install -y /tmp/ensave.deb
 ```
 
-`apt` also installs what ENDownloader needs. Start it from the app grid (search “ENDownloader”) or run `endownloader`.
+`apt` also installs what ENSave needs. Start it from the app grid (search “ENSave”) or run `ensave`.
 Enter your login password when asked (nothing is shown while you type; that is normal).
 Running the same commands again later upgrades to the newest version.
 
@@ -44,10 +49,10 @@ Running the same commands again later upgrades to the newest version.
 
 ```bash
 mkdir -p ~/Applications
-URL=$(curl -fsSL https://api.github.com/repos/mestiaque/endownloader/releases/latest | grep -o 'https://[^"]*_amd64\.AppImage' | head -1)
-curl -fL -o ~/Applications/ENDownloader.AppImage "$URL"
-chmod +x ~/Applications/ENDownloader.AppImage
-~/Applications/ENDownloader.AppImage
+URL=$(curl -fsSL https://api.github.com/repos/mestiaque/ensave/releases/latest | grep -o 'https://[^"]*_amd64\.AppImage' | head -1)
+curl -fL -o ~/Applications/ENSave.AppImage "$URL"
+chmod +x ~/Applications/ENSave.AppImage
+~/Applications/ENSave.AppImage
 ```
 
 ### Windows 10 / 11, installer
@@ -55,22 +60,22 @@ chmod +x ~/Applications/ENDownloader.AppImage
 Open **PowerShell** (Start → type “PowerShell”) and paste:
 
 ```powershell
-$r = Invoke-RestMethod https://api.github.com/repos/mestiaque/endownloader/releases/latest
+$r = Invoke-RestMethod https://api.github.com/repos/mestiaque/ensave/releases/latest
 $a = $r.assets | Where-Object name -like '*-setup.exe' | Select-Object -First 1
 Invoke-WebRequest $a.browser_download_url -OutFile "$env:TEMP\$($a.name)"
 Start-Process "$env:TEMP\$($a.name)" -ArgumentList '/S' -Wait
 ```
 
-No administrator rights are needed. ENDownloader appears in the Start menu.
+No administrator rights are needed. ENSave appears in the Start menu.
 
 ### Windows, portable (no installation)
 
 ```powershell
-$r = Invoke-RestMethod https://api.github.com/repos/mestiaque/endownloader/releases/latest
-$a = $r.assets | Where-Object name -eq 'ENDownloader-portable-windows-x64.zip'
-Invoke-WebRequest $a.browser_download_url -OutFile "$env:TEMP\ENDownloader-portable-windows-x64.zip"
-Expand-Archive "$env:TEMP\ENDownloader-portable-windows-x64.zip" -DestinationPath "$HOME\ENDownloader" -Force
-& "$HOME\ENDownloader\ENDownloader.exe"
+$r = Invoke-RestMethod https://api.github.com/repos/mestiaque/ensave/releases/latest
+$a = $r.assets | Where-Object name -eq 'ENSave-portable-windows-x64.zip'
+Invoke-WebRequest $a.browser_download_url -OutFile "$env:TEMP\ENSave-portable-windows-x64.zip"
+Expand-Archive "$env:TEMP\ENSave-portable-windows-x64.zip" -DestinationPath "$HOME\ENSave" -Force
+& "$HOME\ENSave\ENSave.exe"
 ```
 
 Everything stays in that folder (copy it to a USB stick if you like). It updates itself too.
@@ -80,29 +85,29 @@ Everything stays in that folder (copy it to a USB stick if you like). It updates
 **Ubuntu / Debian:**
 
 ```bash
-sudo apt remove -y en-downloader
+sudo apt remove -y en-save
 ```
 
-**AppImage:** delete the file: `rm ~/Applications/ENDownloader.AppImage`
+**AppImage:** delete the file: `rm ~/Applications/ENSave.AppImage`
 
-**Windows (installer):** Settings → Apps → ENDownloader → Uninstall, or in PowerShell:
+**Windows (installer):** Settings → Apps → ENSave → Uninstall, or in PowerShell:
 
 ```powershell
 $u = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
-  Where-Object DisplayName -like 'ENDownloader*' | Select-Object -First 1
+  Where-Object DisplayName -like 'ENSave*' | Select-Object -First 1
 Start-Process $u.UninstallString.Trim('"') -ArgumentList '/S' -Wait
 ```
 
-**Windows (portable):** delete the folder: `Remove-Item -Recurse -Force "$HOME\ENDownloader"`
+**Windows (portable):** delete the folder: `Remove-Item -Recurse -Force "$HOME\ENSave"`
 
-**Also remove settings and data** (optional). Downloaded files are never touched; only the queue, history, settings and the helper tools ENDownloader fetched are removed.
+**Also remove settings and data** (optional). Downloaded files are never touched; only the queue, history, settings and the helper tools ENSave fetched are removed.
 
 ```bash
-rm -rf ~/.local/share/com.mestiaque.endownloader ~/.cache/com.mestiaque.endownloader ~/.config/com.mestiaque.endownloader                     # Linux
+rm -rf ~/.local/share/com.mestiaque.ensave ~/.cache/com.mestiaque.ensave ~/.config/com.mestiaque.ensave                     # Linux
 ```
 
 ```powershell
-Remove-Item -Recurse -Force "$env:APPDATA\com.mestiaque.endownloader","$env:LOCALAPPDATA\com.mestiaque.endownloader" -ErrorAction SilentlyContinue   # Windows
+Remove-Item -Recurse -Force "$env:APPDATA\com.mestiaque.ensave","$env:LOCALAPPDATA\com.mestiaque.ensave" -ErrorAction SilentlyContinue   # Windows
 ```
 
 ## Quick start (development)
@@ -115,11 +120,11 @@ npx pnpm@9.15.0 tauri dev        # needs libwebkit2gtk-4.1-dev etc. on the host
 Without the WebKit dev packages, build in Docker (uses `endl-build`, or ENViewer's `lumen-build`):
 
 ```bash
-scripts/docker/run.sh "pnpm tauri build --debug --no-bundle"   # → target/debug/endownloader
+scripts/docker/run.sh "pnpm tauri build --debug --no-bundle"   # → target/debug/ensave
 scripts/docker/run.sh "dbus-run-session -- scripts/test/smoke-ui.sh"   # headless UI smoke test + screenshots in target/smoke
 ```
 
-Command line: `endownloader "<url>" [more urls] [--folder X] [--quality 1080] [--minimized]`.
+Command line: `ensave "<url>" [more urls] [--folder X] [--quality 1080] [--minimized]`.
 A second launch hands its links to the running window.
 
 ## Layout

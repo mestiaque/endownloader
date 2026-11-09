@@ -1,16 +1,16 @@
 # How downloading works
 
-ENDownloader calls other tools to do the transfers. It runs them, watches them and keeps the queue in order.
+ENSave calls other tools to do the transfers. It runs them, watches them and keeps the queue in order.
 
 - **aria2** fetches plain files over HTTP(S), FTP and BitTorrent.
 - **yt-dlp** works out how to download from media sites.
 - **FFmpeg** joins video and audio into one file.
 - **gallery-dl** handles image galleries.
 
-This page explains what these tools do on the network and on disk. It also explains how DRM works and why ENDownloader stops when it finds it.
+This page explains what these tools do on the network and on disk. It also explains how DRM works and why ENSave stops when it finds it.
 
 ```text
-            ┌──────────── ENDownloader ────────────┐
+            ┌──────────── ENSave ────────────┐
  link ───▶  │ link parser ─▶ queue (SQLite) ─▶ scheduler │ ──▶ UI (progress 4×/s)
             └──────────────────────┬──────────────┘
                                    │ one Engine trait: start / pause / resume / cancel / events
@@ -53,9 +53,9 @@ The test suite measures this against a local server that caps each connection at
 
 There are limits. A server whose total bandwidth is already used up gains nothing. Some servers reject or throttle clients that open many connections, so the default is 8 and the maximum is 16. Settings → Downloads → *Connections per download* changes it.
 
-**How aria2 keeps track of this.** aria2 writes `file.iso.aria2` next to the partial file. This control file records which pieces are finished. ENDownloader asks aria2 to save it every second.
+**How aria2 keeps track of this.** aria2 writes `file.iso.aria2` next to the partial file. This control file records which pieces are finished. ENSave asks aria2 to save it every second.
 
-After a crash, a power cut or `kill -9`, ENDownloader puts unfinished tasks back in the queue. aria2 reads the control file and requests only the missing ranges. The control file is deleted when the file is complete.
+After a crash, a power cut or `kill -9`, ENSave puts unfinished tasks back in the queue. aria2 reads the control file and requests only the missing ranges. The control file is deleted when the file is complete.
 
 ```text
  crash ─▶ restart ─▶ tasks "active" in SQLite → back to "queued"
@@ -120,13 +120,13 @@ A link to a video page is not a link to a video file. yt-dlp has one *extractor*
                      18   mp4   640x360     avc1         mp4a      (combined)
 ```
 
-ENDownloader runs `yt-dlp --dump-single-json <url>` as a child process. The arguments are passed as an array, never through a shell. ENDownloader reads that JSON to show the title, the qualities and the subtitles before you start.
+ENSave runs `yt-dlp --dump-single-json <url>` as a child process. The arguments are passed as an array, never through a shell. ENSave reads that JSON to show the title, the qualities and the subtitles before you start.
 
-When you pick "1080p", ENDownloader builds a *format selector* such as `bestvideo[height<=1080]+bestaudio/best[height<=1080]`. That means the best video stream up to 1080p plus the best audio stream. If the site has no separate streams, it takes the best combined stream up to 1080p.
+When you pick "1080p", ENSave builds a *format selector* such as `bestvideo[height<=1080]+bestaudio/best[height<=1080]`. That means the best video stream up to 1080p plus the best audio stream. If the site has no separate streams, it takes the best combined stream up to 1080p.
 
 Large sites usually serve the highest qualities as separate video and audio streams, often over DASH or HLS (§2). That is why the next step is needed.
 
-Sites change their players often, and an outdated yt-dlp is the most common cause of "unsupported URL" or "no formats" errors. ENDownloader therefore downloads yt-dlp on first run, checks its version, and offers to update it from Settings → Tools. A failure caused by an outdated version is reported as *ToolOutdated*, not as a generic error.
+Sites change their players often, and an outdated yt-dlp is the most common cause of "unsupported URL" or "no formats" errors. ENSave therefore downloads yt-dlp on first run, checks its version, and offers to update it from Settings → Tools. A failure caused by an outdated version is reported as *ToolOutdated*, not as a generic error.
 
 ---
 
@@ -142,7 +142,7 @@ A video file is a *container* (MP4, MKV, WebM) holding *streams*: video encoded 
   audio.f140.m4a (AAC)             ─┘        (stream copy: seconds, no quality loss)
 ```
 
-ENDownloader always uses `-c copy` when the codecs fit the target container:
+ENSave always uses `-c copy` when the codecs fit the target container:
 
 - H.264 and AAC go into MP4.
 - VP9 and Opus go into WebM or MKV.
@@ -154,7 +154,7 @@ FFmpeg also embeds subtitles, thumbnails and metadata (title, artist, chapters),
 
 ---
 
-## 5. DRM, explained conceptually, and what ENDownloader does about it
+## 5. DRM, explained conceptually, and what ENSave does about it
 
 DRM (*Digital Rights Management*) protects paid streaming services. Netflix, Disney+, Prime Video and most music services use it. In browsers it works through these parts:
 
@@ -174,9 +174,9 @@ DRM (*Digital Rights Management*) protects paid streaming services. Netflix, Dis
 
 Neither the page nor the user ever sees the keys. On many devices the decrypted video doesn't reach normal memory either: it goes straight from secure hardware to the screen. The media segments are ordinary encrypted DASH or HLS. Downloading them yields only ciphertext that no player can use without a license.
 
-**ENDownloader's rule: DRM-protected content is reported as unsupported.** The app contains no code to get keys, imitate a CDM or capture decrypted output, and it never will.
+**ENSave's rule: DRM-protected content is reported as unsupported.** The app contains no code to get keys, imitate a CDM or capture decrypted output, and it never will.
 
-### How ENDownloader recognises DRM
+### How ENSave recognises DRM
 
 The app checks the manifest and the metadata before downloading anything:
 

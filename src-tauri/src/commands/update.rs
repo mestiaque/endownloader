@@ -1,4 +1,4 @@
-//! In-app updates from GitHub releases (mestiaque/endownloader).
+//! In-app updates from GitHub releases (mestiaque/ensave).
 //!
 //! * `check_update`   – asks the GitHub API for the latest release; the only network request
 //!                      for updates, and only when the user allows it (Settings).
@@ -7,8 +7,8 @@
 //!                      .deb → `pkexec apt-get install` (system password prompt),
 //!                      AppImage → the file is replaced atomically,
 //!                      Windows portable zip → unpacked, then copied over this folder
-//!                      after ENDownloader quits (the data folder is left alone),
-//!                      Windows → the NSIS installer runs silently after ENDownloader quits.
+//!                      after ENSave quits (the data folder is left alone),
+//!                      Windows → the NSIS installer runs silently after ENSave quits.
 //! * `restart_app`    – starts the new version once this process has exited.
 
 use serde::{Deserialize, Serialize};
@@ -18,8 +18,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
-const API_LATEST: &str = "https://api.github.com/repos/mestiaque/endownloader/releases/latest";
-const RELEASES_PAGE: &str = "https://github.com/mestiaque/endownloader/releases/latest";
+const API_LATEST: &str = "https://api.github.com/repos/mestiaque/ensave/releases/latest";
+const RELEASES_PAGE: &str = "https://github.com/mestiaque/ensave/releases/latest";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -73,10 +73,10 @@ fn pick_asset<'a>(assets: &'a [serde_json::Value], kind: &Kind) -> Option<&'a se
     assets.iter().find(|a| {
         let n = a["name"].as_str().unwrap_or("");
         match kind {
-            Kind::Deb => n.starts_with("ENDownloader_") && n.ends_with("_amd64.deb"),
-            Kind::AppImage(_) => n.starts_with("ENDownloader_") && n.ends_with("_amd64.AppImage"),
-            Kind::Windows => n.starts_with("ENDownloader_") && n.ends_with("-setup.exe"),
-            Kind::Portable(_) => n == "ENDownloader-portable-windows-x64.zip",
+            Kind::Deb => n.starts_with("ENSave_") && n.ends_with("_amd64.deb"),
+            Kind::AppImage(_) => n.starts_with("ENSave_") && n.ends_with("_amd64.AppImage"),
+            Kind::Windows => n.starts_with("ENSave_") && n.ends_with("-setup.exe"),
+            Kind::Portable(_) => n == "ENSave-portable-windows-x64.zip",
             Kind::Unmanaged => false,
         }
     })
@@ -118,7 +118,7 @@ fn agent(timeout: u64) -> ureq::Agent {
 }
 
 fn user_agent(app: &AppHandle) -> String {
-    format!("ENDownloader/{} (update check)", app.package_info().version)
+    format!("ENSave/{} (update check)", app.package_info().version)
 }
 
 #[tauri::command]
@@ -330,10 +330,10 @@ mod tests {
     fn release(tag: &str) -> serde_json::Value {
         let sha = format!("sha256:{}", "AB".repeat(32));
         json!({ "tag_name": tag, "body": " Fixes ", "html_url": "https://example.invalid/r", "assets": [
-            { "name": "ENDownloader_9.0.0_x64-setup.exe", "browser_download_url": "https://x/w.exe", "size": 3, "digest": sha },
-            { "name": "ENDownloader_9.0.0_amd64.AppImage", "browser_download_url": "https://x/a.AppImage", "size": 4, "digest": sha },
-            { "name": "ENDownloader_9.0.0_amd64.deb", "browser_download_url": "https://x/a.deb", "size": 5, "digest": sha },
-            { "name": "ENDownloader-portable-windows-x64.zip", "browser_download_url": "https://x/p.zip", "size": 6, "digest": sha }
+            { "name": "ENSave_9.0.0_x64-setup.exe", "browser_download_url": "https://x/w.exe", "size": 3, "digest": sha },
+            { "name": "ENSave_9.0.0_amd64.AppImage", "browser_download_url": "https://x/a.AppImage", "size": 4, "digest": sha },
+            { "name": "ENSave_9.0.0_amd64.deb", "browser_download_url": "https://x/a.deb", "size": 5, "digest": sha },
+            { "name": "ENSave-portable-windows-x64.zip", "browser_download_url": "https://x/p.zip", "size": 6, "digest": sha }
         ]})
     }
 
@@ -347,14 +347,14 @@ mod tests {
     #[test]
     fn picks_the_asset_for_this_install() {
         let deb = update_from_release(&release("v9.0.0"), "0.2.0", &Kind::Deb).unwrap();
-        assert_eq!((deb.asset_name.as_str(), deb.notes.as_str(), deb.installable), ("ENDownloader_9.0.0_amd64.deb", "Fixes", true));
+        assert_eq!((deb.asset_name.as_str(), deb.notes.as_str(), deb.installable), ("ENSave_9.0.0_amd64.deb", "Fixes", true));
         assert_eq!(deb.sha256, "ab".repeat(32));
         let portable = update_from_release(&release("v9.0.0"), "0.2.0", &Kind::Portable("C:/x".into())).unwrap();
-        assert_eq!((portable.asset_name.as_str(), portable.installable), ("ENDownloader-portable-windows-x64.zip", true));
+        assert_eq!((portable.asset_name.as_str(), portable.installable), ("ENSave-portable-windows-x64.zip", true));
         let img = update_from_release(&release("v9.0.0"), "0.2.0", &Kind::AppImage("/x".into())).unwrap();
-        assert_eq!(img.asset_name, "ENDownloader_9.0.0_amd64.AppImage");
+        assert_eq!(img.asset_name, "ENSave_9.0.0_amd64.AppImage");
         let win = update_from_release(&release("v9.0.0"), "0.2.0", &Kind::Windows).unwrap();
-        assert_eq!(win.asset_name, "ENDownloader_9.0.0_x64-setup.exe");
+        assert_eq!(win.asset_name, "ENSave_9.0.0_x64-setup.exe");
         let src = update_from_release(&release("v9.0.0"), "0.2.0", &Kind::Unmanaged).unwrap();
         assert!(!src.installable);
         assert!(update_from_release(&release("v0.2.0"), "0.2.0", &Kind::Deb).is_none());

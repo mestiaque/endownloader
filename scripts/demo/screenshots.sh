@@ -13,10 +13,10 @@ TMP=/tmp/demo
 rm -rf /tmp/dhome "$TMP" && mkdir -p "$OUT" "$TMP"
 export HOME=/tmp/dhome XDG_RUNTIME_DIR=/tmp/dhome/run XDG_DATA_HOME=/tmp/dhome/.local/share XDG_CONFIG_HOME=/tmp/dhome/.config
 mkdir -p "$XDG_RUNTIME_DIR" "$HOME/Downloads" && chmod 700 "$XDG_RUNTIME_DIR"
-DB="$XDG_DATA_HOME/com.mestiaque.endownloader/endownloader.db"
-BIN=/src/target/debug/endownloader
+DB="$XDG_DATA_HOME/com.mestiaque.ensave/ensave.db"
+BIN=/src/target/debug/ensave
 PORT=8080
-trap 'pkill -f endownloader; pkill -f range_server; pkill -f "Xvfb :98"; pkill -f yt-dlp' EXIT
+trap 'pkill -f ensave; pkill -f range_server; pkill -f "Xvfb :98"; pkill -f yt-dlp' EXIT
 
 python3 /src/scripts/test/range_server.py $PORT >/dev/null 2>&1 &
 Xvfb :98 -screen 0 1280x800x24 >/dev/null 2>&1 &
@@ -70,7 +70,7 @@ timeout 10 "$BIN" \
   "http://download.blender.org:$PORT/file/48234496/900000/blender-4.3.2-windows-x64.msi" \
   "http://releases.ubuntu.com:$PORT/file/2779774976/2500000/ubuntu-24.04.1-live-server-amd64.iso"
 for _ in $(seq 1 40); do grep -q "analyzed" "$TMP/app.log" && break; sleep 0.5; done
-WID=$(xdotool search --onlyvisible --name ENDownloader | head -1)
+WID=$(xdotool search --onlyvisible --name ENSave | head -1)
 eval "$(xdotool getwindowgeometry --shell "$WID")"
 shot 02-analyze 6   # after the "Added 5 downloads" toast is gone
 

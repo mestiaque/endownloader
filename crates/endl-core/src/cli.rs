@@ -1,4 +1,4 @@
-//! Command line: `endownloader "<url>" [more urls] [--folder X] [--quality 1080] [--minimized]`.
+//! Command line: `ensave "<url>" [more urls] [--folder X] [--quality 1080] [--minimized]`.
 //! A second launch forwards the same arguments to the running instance.
 
 use serde::Serialize;

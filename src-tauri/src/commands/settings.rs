@@ -72,7 +72,7 @@ pub fn export_settings(state: State<AppState>, path: String) -> Result<()> {
 pub fn import_settings(app: AppHandle, state: State<AppState>, path: String) -> Result<Settings> {
     let text = std::fs::read_to_string(path)?;
     let Value::Object(map) = serde_json::from_str::<Value>(&text)? else {
-        return Err(DlError::Other("This is not an ENDownloader settings file".into()));
+        return Err(DlError::Other("This is not an ENSave settings file".into()));
     };
     let known: serde_json::Map<String, Value> = map.into_iter().filter(|(k, _)| Settings::is_known_key(k)).collect();
     let next = Settings::from_map(&known.clone().into_iter().collect());
