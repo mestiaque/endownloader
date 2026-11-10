@@ -11,6 +11,8 @@ import { SettingsDialog } from "./components/settings/SettingsDialog";
 import { ShortcutsDialog } from "./components/settings/ShortcutsDialog";
 import { AnalyzePanel } from "./components/media/AnalyzePanel";
 import { TaskList } from "./components/tasks/TaskList";
+import { MiniProgress } from "./components/tasks/MiniProgress";
+import { useAnalyze } from "./store/analyze";
 import { ConfirmHost, PromptHost, Toaster } from "./components/ui/overlays";
 import { canPause, canResume } from "./engines/taskView";
 import { api } from "./lib/api";
@@ -164,6 +166,8 @@ function handleCli(req: CliRequest | null) {
 }
 
 export default function App() {
+  const listCollapsed = useUi((s) => s.listCollapsed);
+  const hasCards = useAnalyze((s) => s.cards.length > 0);
   const [ready, setReady] = useState(false);
   useTheme();
   useKeys();
@@ -207,7 +211,18 @@ export default function App() {
         <main className="flex min-w-0 flex-1 flex-col">
           <Toolbar />
           <AnalyzePanel />
-          <TaskList />
+          {listCollapsed ? (
+            <>
+              {!hasCards && (
+                <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-[12px] text-faint">
+                  The download list is minimised. Paste a link above, or open the list below.
+                </div>
+              )}
+              <MiniProgress />
+            </>
+          ) : (
+            <TaskList />
+          )}
           <StatusBar />
         </main>
       </div>

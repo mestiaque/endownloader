@@ -36,6 +36,9 @@ interface UiStore {
   promptReq: PromptRequest | null;
   dialog: DialogKind;
   settingsSection: string;
+  /** Download list minimised to one summary progress bar (remembered between starts). */
+  listCollapsed: boolean;
+  setListCollapsed(v: boolean): void;
   toast(t: Omit<Toast, "id">, ttl?: number): number;
   updateToast(id: number, t: Partial<Toast>): void;
   dismiss(id: number): void;
@@ -50,6 +53,21 @@ export const useUi = create<UiStore>((set, get) => ({
   promptReq: null,
   dialog: null,
   settingsSection: "general",
+  listCollapsed: (() => {
+    try {
+      return localStorage.getItem("ensave.listCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  })(),
+  setListCollapsed(v) {
+    try {
+      localStorage.setItem("ensave.listCollapsed", v ? "1" : "0");
+    } catch {
+      /* storage unavailable: only for this session */
+    }
+    set({ listCollapsed: v });
+  },
   toast(t, ttl = 4000) {
     const id = ++toastId;
     set({ toasts: [...get().toasts, { ...t, id }].slice(-5) });

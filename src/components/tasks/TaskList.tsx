@@ -1,12 +1,12 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDownToLine, Copy, ExternalLink, FolderOpen, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { ArrowDownToLine, ChevronDown, Copy, ExternalLink, FolderOpen, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 import { canCancel, canPause, canResume, canRetry, displayName, etaSeconds, percent } from "../../engines/taskView";
 import { api } from "../../lib/api";
 import { cn, formatBytes, formatEta, formatSpeed, hostOf } from "../../lib/format";
 import type { Task } from "../../lib/types";
 import { removeTasks, runAction, targetTasks, useTasks, useVisibleTasks } from "../../store/tasks";
-import { toast } from "../../store/ui";
+import { toast, useUi } from "../../store/ui";
 import { ContextMenu, type MenuEntry } from "../ui/menus";
 import { CategoryIcon } from "./categoryIcon";
 
@@ -189,7 +189,16 @@ export function TaskList() {
         <span className="text-right">Size</span>
         <span className="text-right">Speed</span>
         <span className="text-right">ETA</span>
-        <span />
+        <span className="flex justify-end">
+          <button
+            className="flex h-6 w-6 items-center justify-center rounded text-faint hover:bg-raised hover:text-fg"
+            title="Minimise the list to one progress bar"
+            aria-label="Minimise the list"
+            onClick={() => useUi.getState().setListCollapsed(true)}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </button>
+        </span>
       </div>
       <div
         ref={parentRef}

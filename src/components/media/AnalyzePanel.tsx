@@ -314,9 +314,10 @@ function AnalyzeCard({ card }: { card: Card }) {
 /** Analysis cards above the download list (one per pasted media link). */
 export function AnalyzePanel() {
   const cards = useAnalyze((s) => s.cards);
+  const listCollapsed = useUi((s) => s.listCollapsed);
   if (!cards.length) return null;
   return (
-    <div className="max-h-[62%] shrink-0 space-y-3 overflow-y-auto border-b border-line bg-bg/60 p-3">
+    <div className={cn("space-y-3 overflow-y-auto bg-bg/60 p-3", listCollapsed ? "min-h-0 flex-1" : "max-h-[62%] shrink-0 border-b border-line")}>
       {cards.length > 1 && (
         <div className="flex items-center justify-between px-1 text-[12px] text-muted">
           <span>{cards.length} links</span>
