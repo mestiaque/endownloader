@@ -160,7 +160,7 @@ impl Tools {
             path: found.as_ref().map(|(p, _)| p.display().to_string()),
             version: if found.is_some() { self.version(kind).await } else { None },
             managed: found.is_some_and(|(_, m)| m),
-            installable: kind == ToolKind::YtDlp || kind == ToolKind::Deno || (kind == ToolKind::Ffmpeg && cfg!(windows)),
+            installable: kind == ToolKind::YtDlp || kind == ToolKind::Deno || (kind == ToolKind::Ffmpeg && cfg!(windows)) || (kind == ToolKind::GalleryDl && gallery_dl_asset().is_some()),
         }
     }
 
@@ -183,8 +183,21 @@ impl Tools {
             ToolKind::YtDlp => self.install_yt_dlp_locked().await,
             ToolKind::Deno => self.install_deno_locked().await,
             ToolKind::Ffmpeg if cfg!(windows) => self.install_ffmpeg_locked().await,
+            ToolKind::GalleryDl if gallery_dl_asset().is_some() => self.install_gallery_dl_locked().await,
             _ => Err(DlError::Other(format!("{} is installed with your system's package manager", kind.id()))),
         }
+    }
+
+    /// gallery-dl (pictures of photo posts): install it when it is missing.
+    pub async fn ensure_gallery_dl(&self) -> Result<PathBuf, DlError> {
+        if let Some(p) = self.path(ToolKind::GalleryDl) {
+            return Ok(p);
+        }
+        if gallery_dl_asset().is_none() {
+            return Err(DlError::ToolMissing("gallery-dl".into()));
+        }
+        self.install_once(ToolKind::GalleryDl).await?;
+        self.path(ToolKind::GalleryDl).ok_or_else(|| DlError::ToolMissing("gallery-dl".into()))
     }
 
     /// Make sure everything a media download needs is there, installing what is missing
@@ -259,6 +272,7 @@ impl Tools {
         match kind {
             ToolKind::YtDlp => self.install_yt_dlp_locked().await,
             ToolKind::Deno => self.install_deno_locked().await,
+            ToolKind::GalleryDl => self.install_gallery_dl_locked().await,
             _ => self.install_ffmpeg_locked().await,
         }
         .map(|_| ())
@@ -295,6 +309,18 @@ impl Tools {
 }
 
 const YT_DLP_BASE: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
+const GALLERY_DL_LATEST: &str = "https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest";
+
+/// The official standalone gallery-dl for this platform, where one is published.
+fn gallery_dl_asset() -> Option<&'static str> {
+    if cfg!(windows) {
+        Some("gallery-dl.exe")
+    } else if cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") {
+        Some("gallery-dl.bin")
+    } else {
+        None
+    }
+}
 
 /// The official standalone yt-dlp for this platform (it carries its own Python).
 fn yt_dlp_asset() -> &'static str {
@@ -362,6 +388,29 @@ impl Tools {
         make_executable(&self.managed_path(ToolKind::Deno))?;
         let v = self.version(ToolKind::Deno).await.unwrap_or_else(|| "installed".into());
         log::info!("Deno {v} installed in {}", self.dir.display());
+        Ok(v)
+    }
+
+    /// The official standalone gallery-dl from its latest Codeberg release, checked against
+    /// the release's SHA256SUMS.
+    async fn install_gallery_dl_locked(&self) -> Result<String, DlError> {
+        let asset = gallery_dl_asset().ok_or_else(|| DlError::Other("there is no gallery-dl download for this system".into()))?;
+        let http = http_client()?;
+        let latest: serde_json::Value = serde_json::from_str(&get_text(&http, GALLERY_DL_LATEST).await?).map_err(|e| DlError::Other(format!("gallery-dl release info: {e}")))?;
+        let tag = latest.get("tag_name").and_then(|t| t.as_str()).filter(|t| t.starts_with('v') && t[1..].chars().all(|c| c.is_ascii_digit() || c == '.')).ok_or_else(|| DlError::Other("could not find the latest gallery-dl release".into()))?;
+        let base = format!("https://codeberg.org/mikf/gallery-dl/releases/download/{tag}");
+        let sums = get_text(&http, &format!("{base}/SHA256SUMS")).await?;
+        let expected = checksum_for(&sums, asset).ok_or_else(|| DlError::Other(format!("no checksum published for {asset}")))?;
+        log::info!("downloading gallery-dl {tag} ({asset})");
+        let bytes = verified(get_bytes(&http, &format!("{base}/{asset}")).await?, &expected, "gallery-dl")?;
+        std::fs::create_dir_all(&self.dir)?;
+        let dest = self.managed_path(ToolKind::GalleryDl);
+        let tmp = dest.with_extension("download");
+        std::fs::write(&tmp, &bytes)?;
+        make_executable(&tmp)?;
+        std::fs::rename(&tmp, &dest)?;
+        let v = self.version(ToolKind::GalleryDl).await.unwrap_or_else(|| tag.trim_start_matches('v').to_string());
+        log::info!("gallery-dl {v} installed at {}", dest.display());
         Ok(v)
     }
 

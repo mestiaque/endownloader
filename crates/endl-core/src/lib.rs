@@ -3,6 +3,7 @@
 //! and the engine trait the download engines implement.
 
 pub mod aria2;
+pub mod bundle;
 pub mod cli;
 pub mod db;
 pub mod engine;

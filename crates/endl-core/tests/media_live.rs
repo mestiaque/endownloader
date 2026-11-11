@@ -203,3 +203,85 @@ async fn installs_yt_dlp_and_deno() {
     // Already there and fresh: nothing to do.
     assert_eq!(t.ensure_media_tools(true).await.unwrap(), Vec::<&str>::new());
 }
+
+/// Profile and channel links are listed flat (fast, one entry per post) instead of opening
+/// every video; channel tabs are merged; Facebook profiles get a clear message.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn profiles_and_channels_are_listed() {
+    let t = tools();
+    let prefs = MediaPrefs::default();
+    for link in ["https://www.tiktok.com/@tiktok", "https://www.youtube.com/@YouTube"] {
+        let started = Instant::now();
+        let info = analyze(&t, &prefs, link, false).await.unwrap_or_else(|e| panic!("{link}: {e}"));
+        let photos = info.entries.iter().filter(|e| e.kind == "photo").count();
+        let sections: std::collections::BTreeSet<_> = info.entries.iter().filter_map(|e| e.section.clone()).collect();
+        eprintln!("{link}: {} in {:.1}s — {} entries ({photos} photo posts), tabs {sections:?}", info.platform, started.elapsed().as_secs_f64(), info.entries.len());
+        assert!(info.is_playlist, "{link}");
+        assert!(info.entries.len() > 5, "{link}");
+        assert!(info.entries.iter().filter(|e| e.thumbnail.is_some()).count() > info.entries.len() / 2, "{link}: thumbnails");
+        assert!(started.elapsed() < Duration::from_secs(240));
+    }
+    let e = analyze(&t, &prefs, "https://www.facebook.com/NASA", false).await.unwrap_err();
+    eprintln!("facebook: {e}");
+    assert!(e.to_string().contains("Facebook profiles"));
+}
+
+/// A photo post goes through gallery-dl into its own folder, and a batch folder packs into a
+/// ZIP. Uses a local web server (gallery-dl's direct-link support), so no site is involved.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn photo_post_pictures_and_zip() {
+    use endl_core::engine::{Engine, EngineEvent, TaskSpec};
+    let t = tools();
+    assert!(t.path(ToolKind::GalleryDl).is_some(), "gallery-dl not found");
+    let www = tempfile::tempdir().unwrap();
+    std::fs::write(www.path().join("pic.jpg"), b"\xFF\xD8\xFF\xE0 not really a jpeg").unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let root = www.path().to_path_buf();
+    std::thread::spawn(move || {
+        for s in listener.incoming().flatten() {
+            use std::io::{Read, Write};
+            let mut s = s;
+            let mut buf = [0u8; 2048];
+            let _ = s.read(&mut buf);
+            let body = std::fs::read(root.join("pic.jpg")).unwrap();
+            let _ = write!(s, "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+            let _ = s.write_all(&body);
+        }
+    });
+
+    let out = tempfile::tempdir().unwrap();
+    let batch = out.path().join("someone");
+    let engine = MediaEngine::new(t, Arc::new(MediaPrefs::default));
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let spec = TaskSpec {
+        task_id: 1,
+        url: format!("http://127.0.0.1:{port}/pic.jpg"),
+        folder: batch.clone(),
+        filename: None,
+        connections: 1,
+        speed_limit: 0,
+        headers: Vec::new(),
+        resume_ref: None,
+        options: serde_json::json!({ "photo": true, "title": "বৈশাখ🥁", "mediaId": "7628818803387813141" }),
+    };
+    engine.start(spec, tx).await.expect("start");
+    let finished = loop {
+        match tokio::time::timeout(Duration::from_secs(60), rx.recv()).await.expect("gallery-dl took too long") {
+            Some(EngineEvent::Finished { path }) => break path,
+            Some(EngineEvent::Failed(e)) => panic!("failed: {e}"),
+            Some(_) => {}
+            None => panic!("engine stopped without an answer"),
+        }
+    };
+    eprintln!("pictures in {}", finished.display());
+    assert_eq!(finished, batch.join("বৈশাখ🥁 [7628818803387813141]"));
+    let files: Vec<_> = std::fs::read_dir(&finished).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    assert_eq!(files.len(), 1, "{files:?}");
+
+    let zip = out.path().join("someone.zip");
+    assert_eq!(endl_core::bundle::zip_folder(&batch, &zip).unwrap(), 1);
+    assert!(zip.is_file() && !batch.exists());
+}

@@ -65,6 +65,8 @@ pub struct Settings {
     /// yt-dlp `--cookies-from-browser`: "", "firefox", "chrome", "chromium", "edge", "brave",
     /// "opera", "vivaldi". Cookies are read from the browser when needed, never stored.
     pub cookies_browser: String,
+    /// Blur thumbnails on analysis cards; press and hold one to see it.
+    pub blur_previews: bool,
     // Appearance
     /// "dark" | "light" | "glass" | "system"
     pub theme: String,
@@ -94,6 +96,7 @@ impl Default for Settings {
             categories: default_categories(),
             media_quality: "best".into(),
             cookies_browser: String::new(),
+            blur_previews: true,
             theme: "dark".into(),
             accent: "#3b82f6".into(),
             animations: true,

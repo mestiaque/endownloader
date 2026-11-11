@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   retries: 3,
   mediaQuality: "best",
   cookiesBrowser: "",
+  blurPreviews: true,
   categories: [],
   theme: "dark",
   accent: "#3b82f6",

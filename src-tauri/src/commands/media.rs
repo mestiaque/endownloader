@@ -42,11 +42,11 @@ pub async fn analyze_url(app: AppHandle, url: String, playlist: Option<bool>) ->
 
 /// Queue media downloads with the chosen format (one item, or many from a playlist).
 #[tauri::command]
-pub fn add_media(app: AppHandle, items: Vec<MediaItem>, option: MediaOption, folder: Option<String>) -> Result<Vec<Task>> {
+pub fn add_media(app: AppHandle, items: Vec<MediaItem>, option: MediaOption, folder: Option<String>, zip: Option<String>) -> Result<Vec<Task>> {
     if items.is_empty() {
         return Err(DlError::Other("Nothing selected".into()));
     }
-    queue::add_media(&app, &items, &option, folder)
+    queue::add_media(&app, &items, &option, folder, zip)
 }
 
 #[tauri::command]

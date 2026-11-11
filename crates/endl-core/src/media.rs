@@ -120,6 +120,10 @@ pub struct PlaylistEntry {
     pub url: String,
     pub duration: Option<f64>,
     pub thumbnail: Option<String>,
+    /// "video" | "photo" (a TikTok photo slideshow: yt-dlp saves only its sound).
+    pub kind: String,
+    /// The channel tab the entry came from ("Videos", "Shorts", "Live"), when there are tabs.
+    pub section: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -330,15 +334,8 @@ pub fn parse_info(v: &Value, requested_url: &str) -> Result<MediaInfo, DlError> 
     };
 
     if is_playlist {
-        let entries = v.get("entries").and_then(Value::as_array).cloned().unwrap_or_default();
-        info.entries = entries
-            .iter()
-            .filter_map(|e| {
-                let url = s(e, "webpage_url").or_else(|| s(e, "url"))?;
-                let id = s(e, "id").unwrap_or_else(|| url.clone());
-                Some(PlaylistEntry { id, title: s(e, "title").unwrap_or_else(|| url.clone()), url, duration: f(e, "duration"), thumbnail: best_thumbnail(e) })
-            })
-            .collect();
+        let mut seen = std::collections::HashSet::new();
+        collect_entries(v, None, &mut info.entries, &mut seen);
         if info.thumbnail.is_none() {
             info.thumbnail = info.entries.iter().find_map(|e| e.thumbnail.clone());
         }
@@ -441,6 +438,50 @@ pub fn parse_info(v: &Value, requested_url: &str) -> Result<MediaInfo, DlError> 
     Ok(info)
 }
 
+/// A TikTok slideshow: flat listings give it a `/video/` link, but its cover is a "photomode" image.
+fn entry_kind(e: &Value, url: &str) -> &'static str {
+    let photo_thumb = || e.get("thumbnails").and_then(Value::as_array).is_some_and(|t| t.iter().any(|t| s(t, "url").is_some_and(|u| u.contains("photomode"))));
+    if url.contains("/photo/") || s(e, "thumbnail").is_some_and(|u| u.contains("photomode")) || photo_thumb() {
+        "photo"
+    } else {
+        "video"
+    }
+}
+
+/// Entries of a flat playlist. A YouTube channel lists its tabs (Videos, Live, Shorts) as
+/// nested playlists: their entries are taken in order, each tagged with the tab name.
+fn collect_entries(v: &Value, section: Option<&str>, out: &mut Vec<PlaylistEntry>, seen: &mut std::collections::HashSet<String>) {
+    let Some(entries) = v.get("entries").and_then(Value::as_array) else { return };
+    let parent = s(v, "title").unwrap_or_default();
+    for e in entries {
+        if e.is_null() {
+            continue;
+        }
+        if e.get("entries").is_some_and(Value::is_array) {
+            // "YouTube - Shorts" → "Shorts"
+            let title = s(e, "title").unwrap_or_default();
+            let tab = title.strip_prefix(&format!("{parent} - ")).map(str::to_string).or_else(|| title.rsplit_once(" - ").map(|(_, t)| t.to_string())).unwrap_or(title);
+            collect_entries(e, Some(&tab), out, seen);
+            continue;
+        }
+        let Some(url) = s(e, "webpage_url").or_else(|| s(e, "url")) else { continue };
+        let id = s(e, "id").unwrap_or_else(|| url.clone());
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        let kind = entry_kind(e, &url).to_string();
+        out.push(PlaylistEntry {
+            id,
+            title: s(e, "title").unwrap_or_else(|| url.clone()),
+            duration: f(e, "duration"),
+            thumbnail: best_thumbnail(e),
+            kind,
+            section: section.map(str::to_string),
+            url,
+        });
+    }
+}
+
 // ---------- errors ----------
 
 /// The last `ERROR:` line of yt-dlp's output, without the `[extractor] id:` prefix.
@@ -496,6 +537,30 @@ pub fn map_error(msg: &str, yt_dlp_age: Option<i64>) -> DlError {
     }
 }
 
+/// A 403 from a media site usually means it blocks downloads from this computer (TikTok does
+/// this to anything that is not a signed-in browser): point to the cookies setting.
+pub fn forbidden_hint(cookies_browser: &str) -> DlError {
+    if cookies_browser.trim().is_empty() {
+        DlError::Other("The site refused access (403). Sign in to it in your browser, then choose that browser in Settings → Media → Cookies from browser, and retry.".into())
+    } else {
+        DlError::Other("The site refused access (403), even with your browser's cookies. Open the site in that browser to check you are signed in, wait a while, then retry.".into())
+    }
+}
+
+/// A clearer message for collection pages yt-dlp cannot list.
+pub fn explain_unsupported(link: &str, msg: &str) -> Option<DlError> {
+    if !msg.to_ascii_lowercase().contains("unsupported url") {
+        return None;
+    }
+    let host = url::Url::parse(link).ok()?.host_str()?.to_ascii_lowercase();
+    if host.ends_with("facebook.com") || host == "fb.watch" {
+        return Some(DlError::Other(
+            "Facebook profiles and pages can't be listed: Facebook doesn't let tools read them. Open one video or reel and paste its link.".into(),
+        ));
+    }
+    None
+}
+
 // ---------- running yt-dlp ----------
 
 /// Per-user media preferences the engine reads when it starts yt-dlp.
@@ -529,28 +594,29 @@ pub async fn analyze(tools: &Tools, prefs: &MediaPrefs, link: &str, playlist: bo
     let ytdlp = tools.path(ToolKind::YtDlp).ok_or_else(|| DlError::ToolMissing("yt-dlp".into()))?;
     let mut args = common_args(tools, prefs);
     args.extend(["-J".into(), "--no-warnings".into()]);
-    if playlist {
-        args.push("--flat-playlist".into());
-        args.push("--yes-playlist".into());
-    } else {
-        args.push("--no-playlist".into());
-    }
+    // Always flat: a profile or channel link is listed (one request per page of results)
+    // instead of opening every video in it, which is slow and gets refused (TikTok: 403).
+    // It does not change single videos. `--no-playlist` only matters for a video link that
+    // also names a playlist (YouTube `&list=`).
+    args.push("--flat-playlist".into());
+    args.push(if playlist { "--yes-playlist" } else { "--no-playlist" }.into());
     args.push("--".into());
     args.push(link.to_string());
     let mut cmd = Command::new(&ytdlp);
     cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     no_window(&mut cmd);
     let started = std::time::Instant::now();
-    let out = tokio::time::timeout(Duration::from_secs(120), cmd.output())
+    // Listing a big profile or channel takes a while (~1 minute per 1,500 posts on TikTok).
+    let out = tokio::time::timeout(Duration::from_secs(300), cmd.output())
         .await
-        .map_err(|_| DlError::Network("the site took too long to answer (2 minutes)".into()))?
+        .map_err(|_| DlError::Network("the site took too long to answer (5 minutes)".into()))?
         .map_err(|e| DlError::ToolMissing(format!("yt-dlp ({e})")))?;
     let stderr = String::from_utf8_lossy(&out.stderr);
     if !out.status.success() {
         let msg = last_error(&stderr).unwrap_or_else(|| stderr.lines().last().unwrap_or("yt-dlp failed").to_string());
         log::warn!("analyze failed: {msg}");
         let version = tools.version(ToolKind::YtDlp).await;
-        return Err(map_error(&msg, yt_dlp_age(tools, version.as_deref())));
+        return Err(explain_unsupported(link, &msg).unwrap_or_else(|| map_error(&msg, yt_dlp_age(tools, version.as_deref()))));
     }
     let v: Value = serde_json::from_slice(&out.stdout).map_err(|e| DlError::Other(format!("yt-dlp gave unreadable output: {e}")))?;
     let info = parse_info(&v, link)?;
@@ -630,6 +696,8 @@ struct Proc {
     done: Arc<AtomicBool>,
     folder: PathBuf,
     media_id: Option<String>,
+    /// Photo posts: the folder the pictures go into (removed when cancelled).
+    photo_dir: Option<PathBuf>,
 }
 
 pub struct MediaEngine {
@@ -645,12 +713,12 @@ impl MediaEngine {
     }
 
     /// Stop a running yt-dlp (and the FFmpeg it started) and wait until it is gone.
-    async fn stop(&self, key: &str) -> Option<(PathBuf, Option<String>)> {
-        let (pid, exited, done, folder, media_id) = {
+    async fn stop(&self, key: &str) -> Option<(PathBuf, Option<String>, Option<PathBuf>)> {
+        let (pid, exited, done, folder, media_id, photo_dir) = {
             let procs = self.procs.lock();
             let p = procs.get(key)?;
             p.stopped.store(true, Ordering::SeqCst);
-            (p.pid, p.exited.clone(), p.done.clone(), p.folder.clone(), p.media_id.clone())
+            (p.pid, p.exited.clone(), p.done.clone(), p.folder.clone(), p.media_id.clone(), p.photo_dir.clone())
         };
         if let Some(pid) = pid {
             kill_tree(pid);
@@ -659,7 +727,7 @@ impl MediaEngine {
             let _ = tokio::time::timeout(Duration::from_secs(5), exited.notified()).await;
         }
         self.procs.lock().remove(key);
-        Some((folder, media_id))
+        Some((folder, media_id, photo_dir))
     }
 }
 
@@ -681,6 +749,139 @@ fn kill_tree(pid: u32) {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
         let _ = cmd.output();
+    }
+}
+
+/// The folder a photo post's pictures go into: "<title> [<id>]" (or the id alone).
+pub fn photo_folder_name(title: Option<&str>, id: Option<&str>) -> String {
+    let title = title.map(str::trim).filter(|t| !t.is_empty() && !t.starts_with("http"));
+    let name = match (title, id) {
+        (Some(t), Some(i)) => format!("{} [{i}]", t.chars().take(80).collect::<String>()),
+        (Some(t), None) => t.chars().take(80).collect(),
+        (None, Some(i)) => format!("Photos [{i}]"),
+        (None, None) => "Photos".into(),
+    };
+    crate::filename::clean_filename(&name)
+}
+
+/// The error of a failed gallery-dl run, from its stderr (`[tiktok][error] <url>: <message>`).
+pub fn gallery_error(stderr: &str, cookies_browser: &str) -> DlError {
+    let line = stderr.lines().rev().find(|l| l.contains("][error]")).or_else(|| stderr.lines().rev().find(|l| !l.trim().is_empty())).unwrap_or("gallery-dl failed");
+    let msg = line.split_once("][error]").map_or(line, |(_, m)| m).trim();
+    // Drop the "<url>: " prefix.
+    let msg = match msg.split_once(": ") {
+        Some((head, rest)) if head.starts_with("http") => rest,
+        _ => msg,
+    };
+    let l = msg.to_ascii_lowercase();
+    if l.contains("403") {
+        forbidden_hint(cookies_browser)
+    } else if l.contains("404") || l.contains("not found") {
+        DlError::NotFound
+    } else if l.contains("429") {
+        DlError::RateLimited
+    } else {
+        DlError::Other(msg.to_string())
+    }
+}
+
+impl MediaEngine {
+    /// A photo post (TikTok slideshow): gallery-dl saves its pictures into their own folder.
+    /// The post's sound and any video are left out (`audio=false`, `videos=false`).
+    async fn start_photo(&self, spec: TaskSpec, events: mpsc::Sender<EngineEvent>) -> Result<EngineRef, DlError> {
+        let gdl = self.tools.ensure_gallery_dl().await?;
+        let opt = |k: &str| spec.options.get(k).and_then(Value::as_str).map(str::to_string).filter(|v| !v.is_empty());
+        let dir = spec.folder.join(photo_folder_name(opt("title").as_deref(), opt("mediaId").as_deref()));
+        std::fs::create_dir_all(&dir)?;
+        let prefs = (self.prefs)();
+        let mut args: Vec<String> = vec!["--config-ignore".into()];
+        if !prefs.cookies_browser.trim().is_empty() {
+            args.push("--cookies-from-browser".into());
+            args.push(prefs.cookies_browser.trim().to_string());
+        }
+        args.extend(["-o", "audio=false", "-o", "videos=false", "-o", "covers=false", "-D"].map(String::from));
+        args.push(dir.display().to_string());
+        args.extend(["-f", "{num:>02}.{extension}", "--Print", "after:ENDLFILE {_path}"].map(String::from));
+        if spec.speed_limit > 0 {
+            args.push("--limit-rate".into());
+            args.push(spec.speed_limit.to_string());
+        }
+        args.push("--".into());
+        args.push(spec.url.clone());
+
+        let mut cmd = Command::new(&gdl);
+        cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+        no_window(&mut cmd);
+        #[cfg(unix)]
+        {
+            cmd.process_group(0);
+        }
+        let mut child = cmd.spawn().map_err(|e| DlError::ToolMissing(format!("gallery-dl ({e})")))?;
+        let pid = child.id();
+        let key = format!("p{}-{}", spec.task_id, self.seq.fetch_add(1, Ordering::Relaxed));
+        let stopped = Arc::new(AtomicBool::new(false));
+        let exited = Arc::new(tokio::sync::Notify::new());
+        let done = Arc::new(AtomicBool::new(false));
+        self.procs.lock().insert(key.clone(), Proc { pid, stopped: stopped.clone(), exited: exited.clone(), done: done.clone(), folder: spec.folder.clone(), media_id: None, photo_dir: Some(dir.clone()) });
+        log::info!("media task {} started: photo post with gallery-dl", spec.task_id);
+
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let procs = self.procs.clone();
+        let task_id = spec.task_id;
+        let cookies = prefs.cookies_browser.clone();
+        let key2 = key.clone();
+        tokio::spawn(async move {
+            let err_task = tokio::spawn(async move {
+                let mut tail = String::new();
+                if let Some(e) = stderr {
+                    let mut lines = BufReader::new(e).lines();
+                    while let Ok(Some(l)) = lines.next_line().await {
+                        tail.push_str(&l);
+                        tail.push('\n');
+                        if tail.len() > 16_384 {
+                            tail.drain(..tail.len() - 8192);
+                        }
+                    }
+                }
+                tail
+            });
+            let (mut files, mut bytes) = (0usize, 0u64);
+            if let Some(o) = stdout {
+                let mut lines = BufReader::new(o).lines();
+                while let Ok(Some(l)) = lines.next_line().await {
+                    if let Some(p) = l.strip_prefix("ENDLFILE ") {
+                        files += 1;
+                        bytes += std::fs::metadata(p.trim()).map(|m| m.len()).unwrap_or(0);
+                        let _ = events.try_send(EngineEvent::Progress(Progress { done: bytes, total: None, speed: 0, eta_secs: None, connections: 1 }));
+                    }
+                }
+            }
+            let status = child.wait().await;
+            let tail = err_task.await.unwrap_or_default();
+            done.store(true, Ordering::SeqCst);
+            exited.notify_waiters();
+            if stopped.load(Ordering::SeqCst) {
+                return;
+            }
+            procs.lock().remove(&key2);
+            let ok = status.as_ref().map(|s| s.success()).unwrap_or(false);
+            // Pictures saved count as done even when gallery-dl reports a problem afterwards.
+            if files > 0 {
+                if !ok {
+                    log::warn!("media task {task_id}: gallery-dl ended with an error after {files} picture(s)");
+                }
+                let name = dir.file_name().map(|n| n.to_string_lossy().into_owned());
+                let _ = events.send(EngineEvent::Meta { title: None, filename: name, total: Some(bytes) }).await;
+                let _ = events.send(EngineEvent::Finished { path: dir }).await;
+            } else {
+                let _ = std::fs::remove_dir(&dir); // empty
+                let err = if ok { DlError::Other("No pictures were found in this post".into()) } else { gallery_error(&tail, &cookies) };
+                log::warn!("media task {task_id} failed: {err}");
+                let _ = events.send(EngineEvent::Failed(err)).await;
+            }
+        });
+        Ok(EngineRef { task_id: spec.task_id, key })
     }
 }
 
@@ -708,6 +909,9 @@ impl Engine for MediaEngine {
     }
 
     async fn start(&self, spec: TaskSpec, events: mpsc::Sender<EngineEvent>) -> Result<EngineRef, DlError> {
+        if spec.options.get("photo").and_then(Value::as_bool) == Some(true) {
+            return self.start_photo(spec, events).await;
+        }
         // First media download on a fresh install (command line, playlist): fetch yt-dlp & co.
         self.tools.ensure_media_tools(false).await?;
         let ytdlp = self.tools.path(ToolKind::YtDlp).ok_or_else(|| DlError::ToolMissing("yt-dlp".into()))?;
@@ -780,7 +984,8 @@ impl Engine for MediaEngine {
         let exited = Arc::new(tokio::sync::Notify::new());
         let done = Arc::new(AtomicBool::new(false));
         let media_id = opt("mediaId");
-        self.procs.lock().insert(key.clone(), Proc { pid, stopped: stopped.clone(), exited: exited.clone(), done: done.clone(), folder: spec.folder.clone(), media_id });
+        let cookies_browser = prefs.cookies_browser.clone();
+        self.procs.lock().insert(key.clone(), Proc { pid, stopped: stopped.clone(), exited: exited.clone(), done: done.clone(), folder: spec.folder.clone(), media_id, photo_dir: None });
         log::info!("media task {} started: yt-dlp -f {format}", spec.task_id);
 
         let streams = format.split('/').next().map_or(1, |first| first.matches('+').count() + 1);
@@ -850,7 +1055,11 @@ impl Engine for MediaEngine {
                     let msg = last_error(&tail).unwrap_or_else(|| tail.lines().last().unwrap_or("yt-dlp failed").to_string());
                     log::warn!("media task {task_id} failed: {msg}");
                     let version = tools.version(ToolKind::YtDlp).await;
-                    let _ = events.send(EngineEvent::Failed(map_error(&msg, version.as_deref().and_then(|v| yt_dlp_age_days(v, today_days()))))).await;
+                    let err = match map_error(&msg, version.as_deref().and_then(|v| yt_dlp_age_days(v, today_days()))) {
+                        DlError::Forbidden => forbidden_hint(&cookies_browser),
+                        e => e,
+                    };
+                    let _ = events.send(EngineEvent::Failed(err)).await;
                 }
             }
         });
@@ -868,12 +1077,16 @@ impl Engine for MediaEngine {
     }
 
     async fn cancel(&self, r: &EngineRef, keep_partial: bool) -> Result<(), DlError> {
-        if let Some((folder, Some(id))) = self.stop(&r.key).await {
-            if !keep_partial {
+        match self.stop(&r.key).await {
+            Some((_, _, Some(dir))) if !keep_partial => {
+                let _ = std::fs::remove_dir_all(&dir);
+            }
+            Some((folder, Some(id), None)) if !keep_partial => {
                 for p in partial_files(&folder, &id) {
                     remove_quietly(&p);
                 }
             }
+            _ => {}
         }
         Ok(())
     }
@@ -978,6 +1191,58 @@ mod tests {
         assert_eq!(i.entries.len(), 2);
         assert_eq!(i.platform, "YouTube");
         assert!(i.video.iter().any(|o| o.format == height_selector(1080)));
+    }
+
+    #[test]
+    fn channel_tabs_are_flattened() {
+        let v = json!({"_type": "playlist", "id": "UC1", "title": "Chan", "extractor_key": "YoutubeTab", "entries": [
+            {"_type": "playlist", "title": "Chan - Videos", "entries": [
+                {"_type": "url", "id": "a", "title": "One", "url": "https://www.youtube.com/watch?v=a", "duration": 60.0},
+                {"_type": "url", "id": "b", "title": "Two", "url": "https://www.youtube.com/watch?v=b"}
+            ]},
+            {"_type": "playlist", "title": "Chan - Shorts", "entries": [
+                {"_type": "url", "id": "c", "title": "Short", "url": "https://www.youtube.com/shorts/c"},
+                {"_type": "url", "id": "a", "title": "One again", "url": "https://www.youtube.com/watch?v=a"}
+            ]}
+        ]});
+        let i = parse_info(&v, "https://www.youtube.com/@chan").unwrap();
+        let got: Vec<(&str, Option<&str>)> = i.entries.iter().map(|e| (e.id.as_str(), e.section.as_deref())).collect();
+        assert_eq!(got, vec![("a", Some("Videos")), ("b", Some("Videos")), ("c", Some("Shorts"))]);
+    }
+
+    #[test]
+    fn tiktok_photo_posts_are_marked() {
+        let v = json!({"_type": "playlist", "id": "u", "title": "someone", "extractor_key": "TikTokUser", "entries": [
+            {"_type": "url", "id": "1", "title": "", "url": "https://www.tiktok.com/@someone/video/1", "duration": 29,
+             "thumbnails": [{"id": "cover", "url": "https://p16-common-sign.tiktokcdn.com/tos-alisg-i-photomode-sg/abc~tplv.jpeg"}]},
+            {"_type": "url", "id": "2", "title": "clip", "url": "https://www.tiktok.com/@someone/video/2",
+             "thumbnails": [{"id": "cover", "url": "https://p19-common-sign.tiktokcdn.com/tos-alisg-p-0037/xyz~tplv.jpeg"}]}
+        ]});
+        let i = parse_info(&v, "https://www.tiktok.com/@someone").unwrap();
+        assert_eq!(i.platform, "TikTok");
+        assert_eq!(i.entries[0].kind, "photo");
+        assert_eq!(i.entries[1].kind, "video");
+        assert!(i.entries[0].section.is_none());
+    }
+
+    #[test]
+    fn facebook_profiles_get_a_clear_message() {
+        let e = explain_unsupported("https://www.facebook.com/NASA", "Unsupported URL: https://www.facebook.com/NASA").unwrap();
+        assert!(matches!(e, DlError::Other(m) if m.contains("Facebook profiles")));
+        assert!(explain_unsupported("https://example.com/x", "Unsupported URL: https://example.com/x").is_none());
+        assert!(explain_unsupported("https://www.facebook.com/NASA", "HTTP Error 403").is_none());
+    }
+
+    #[test]
+    fn photo_posts() {
+        assert_eq!(photo_folder_name(Some("বৈশাখ🥁"), Some("7628818803387813141")), "বৈশাখ🥁 [7628818803387813141]");
+        assert_eq!(photo_folder_name(Some("https://www.tiktok.com/@u/video/1"), Some("1")), "Photos [1]");
+        assert_eq!(photo_folder_name(Some("a/b"), None), crate::filename::clean_filename("a/b"));
+        let tail = "[tiktok][info] Solving JavaScript challenge\n[tiktok][error] https://www.tiktok.com/@u/video/1: Failed to extract post (HttpError: '403 Forbidden' for 'https://www.tiktok.com/@u/video/1')\n";
+        assert!(matches!(gallery_error(tail, ""), DlError::Other(m) if m.contains("Cookies from browser")));
+        assert!(matches!(gallery_error(tail, "chrome"), DlError::Other(m) if m.contains("even with your browser")));
+        assert_eq!(gallery_error("[tiktok][error] https://x/1: HttpError: '404 Not Found'", ""), DlError::NotFound);
+        assert_eq!(gallery_error("[tiktok][error] https://x/1: Post is private", ""), DlError::Other("Post is private".into()));
     }
 
     #[test]

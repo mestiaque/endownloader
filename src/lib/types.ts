@@ -48,6 +48,10 @@ export interface PlaylistEntry {
   url: string;
   duration: number | null;
   thumbnail: string | null;
+  /** "photo" = a TikTok photo slideshow (only its sound can be saved). */
+  kind: "video" | "photo";
+  /** Channel tab the entry came from ("Videos", "Shorts", "Live"). */
+  section: string | null;
 }
 
 export interface MediaInfo {
@@ -109,6 +113,8 @@ export interface Settings {
   retries: number;
   mediaQuality: "best" | "2160" | "1440" | "1080" | "720" | "480" | "360" | "audio" | "mp3";
   cookiesBrowser: "" | "firefox" | "chrome" | "chromium" | "edge" | "brave" | "opera" | "vivaldi";
+  /** Blur thumbnails on analysis cards; press and hold one to see it. */
+  blurPreviews: boolean;
   categories: Category[];
   theme: "dark" | "light" | "glass" | "system";
   accent: string;

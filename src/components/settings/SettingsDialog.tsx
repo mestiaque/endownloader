@@ -370,6 +370,7 @@ function MediaSection() {
           ]}
         />
       </Field>
+      <Toggle k="blurPreviews" label="Blur previews" hint="Thumbnails on analysis cards stay blurred until you press and hold one" />
       <div className="py-3 text-[11px] text-faint">DRM-protected content (Netflix, Disney+, Spotify and similar) is not supported and is reported as such.</div>
     </>
   );
@@ -386,7 +387,7 @@ const TOOL_TEXT: Record<ToolInfo["id"], { name: string; what: string; missing: s
   },
   deno: { name: "Deno", what: "JavaScript runtime yt-dlp uses for YouTube (preferred)", missing: "Downloaded automatically when Node.js is not installed either" },
   node: { name: "Node.js", what: "JavaScript runtime yt-dlp can use for YouTube", missing: "Optional — without Deno or Node.js some YouTube formats may be missing" },
-  "gallery-dl": { name: "gallery-dl", what: "Image galleries and photo posts", missing: "Optional — install it to download image galleries" },
+  "gallery-dl": { name: "gallery-dl", what: "Pictures of photo posts (TikTok slideshows)", missing: "Installed automatically the first time a photo post is downloaded" },
 };
 
 function ToolsSection() {

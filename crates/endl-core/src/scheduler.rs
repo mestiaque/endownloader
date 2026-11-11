@@ -12,6 +12,9 @@
 //!   database once a second, so a crash loses at most a second of bookkeeping (the bytes
 //!   themselves are safe in the engine's partial file).
 //! - Transient failures (network, 429, 5xx) are retried with exponential backoff.
+//! - Media downloads from one site (tiktok.com, youtube.com…) run one at a time, with a short
+//!   pause between them: a profile's 80 videos at once get refused (403/429). Other sites
+//!   and plain files keep using the free slots.
 
 use crate::db::Db;
 use crate::engine::{Engine, EngineEvent, EngineRef, TaskSpec};
@@ -28,6 +31,23 @@ use tokio::sync::{mpsc, oneshot};
 const TICK: Duration = Duration::from_millis(250);
 const DB_PROGRESS_EVERY: Duration = Duration::from_secs(1);
 
+/// The site a media task belongs to ("tiktok.com", "youtube.com"), for the one-at-a-time rule.
+/// None for plain file downloads.
+pub fn media_site(t: &Task) -> Option<String> {
+    site_of(&t.url, t.engine)
+}
+
+fn site_of(link: &str, engine: EngineKind) -> Option<String> {
+    if engine != EngineKind::Media {
+        return None;
+    }
+    let host = url::Url::parse(link).ok()?.host_str()?.to_ascii_lowercase();
+    let labels: Vec<&str> = host.split('.').collect();
+    // Last two labels; three for "co.uk"-style endings.
+    let n = if labels.len() >= 3 && labels[labels.len() - 2].len() <= 3 && labels[labels.len() - 1].len() == 2 { 3 } else { 2 };
+    Some(labels[labels.len().saturating_sub(n)..].join("."))
+}
+
 /// Settings the scheduler reads each time it decides something.
 #[derive(Debug, Clone)]
 pub struct RunConfig {
@@ -40,11 +60,13 @@ pub struct RunConfig {
     pub retry_base: Duration,
     /// Bytes per second per task, 0 = unlimited.
     pub speed_limit: u64,
+    /// Pause between two media downloads from the same site (they run one at a time).
+    pub site_gap: Duration,
 }
 
 impl Default for RunConfig {
     fn default() -> Self {
-        Self { max_parallel: 3, conflict: "rename".into(), keep_partial: false, retries: 3, retry_base: Duration::from_secs(5), speed_limit: 0 }
+        Self { max_parallel: 3, conflict: "rename".into(), keep_partial: false, retries: 3, retry_base: Duration::from_secs(5), speed_limit: 0, site_gap: Duration::from_secs(3) }
     }
 }
 
@@ -153,6 +175,8 @@ struct Running {
     eref: EngineRef,
     path: Option<PathBuf>,
     last_db: Instant,
+    /// Media site of this download (see [`media_site`]).
+    site: Option<String>,
 }
 
 pub struct Scheduler {
@@ -171,6 +195,8 @@ pub struct Scheduler {
     not_before: HashMap<i64, Instant>,
     pending: HashMap<i64, ProgressItem>,
     gen: u64,
+    /// Media sites that may not start their next download before this instant.
+    site_gap: HashMap<String, Instant>,
 }
 
 /// What to do before handing a task to its engine.
@@ -197,6 +223,7 @@ impl Scheduler {
             not_before: HashMap::new(),
             pending: HashMap::new(),
             gen: 0,
+            site_gap: HashMap::new(),
         };
         (s, handle)
     }
@@ -219,8 +246,9 @@ impl Scheduler {
                 _ = tick.tick() => {
                     self.flush_progress(false);
                     let now = Instant::now();
-                    if self.not_before.values().any(|t| *t <= now) {
+                    if self.not_before.values().any(|t| *t <= now) || self.site_gap.values().any(|t| *t <= now) {
                         self.not_before.retain(|_, t| *t > now);
+                        self.site_gap.retain(|_, t| *t > now);
                         self.fill().await;
                     }
                 }
@@ -287,11 +315,28 @@ impl Scheduler {
             return;
         }
         let now = Instant::now();
-        let candidates = match self.db.next_queued(free + self.not_before.len()) {
+        // Look further down the queue: tasks waiting for their site are skipped.
+        let candidates = match self.db.next_queued(free + self.not_before.len() + 200) {
             Ok(c) => c,
             Err(e) => return log::error!("queue: {e}"),
         };
-        let eligible: Vec<Task> = candidates.into_iter().filter(|t| self.not_before.get(&t.id).is_none_or(|nb| *nb <= now)).take(free).collect();
+        let mut busy: std::collections::HashSet<String> = self.running.values().filter_map(|r| r.site.clone()).collect();
+        busy.extend(self.site_gap.iter().filter(|(_, t)| **t > now).map(|(s, _)| s.clone()));
+        let mut eligible = Vec::new();
+        for t in candidates {
+            if eligible.len() == free {
+                break;
+            }
+            if self.not_before.get(&t.id).is_some_and(|nb| *nb > now) {
+                continue;
+            }
+            if let Some(site) = media_site(&t) {
+                if !busy.insert(site) {
+                    continue; // one download per site at a time
+                }
+            }
+            eligible.push(t);
+        }
         for t in eligible {
             self.not_before.remove(&t.id);
             self.start_task(t, &cfg).await;
@@ -313,7 +358,7 @@ impl Scheduler {
                 match he.resume(&eref).await {
                     Ok(()) => {
                         let path = t.filename.as_ref().map(|n| folder.join(n));
-                        self.running.insert(t.id, Running { kind: hk, gen: old_gen, eref, path, last_db: Instant::now() });
+                        self.running.insert(t.id, Running { kind: hk, gen: old_gen, eref, path, last_db: Instant::now(), site: media_site(&t) });
                         self.report(self.db.apply_action(&[t.id], Action::Run));
                         return;
                     }
@@ -375,7 +420,7 @@ impl Scheduler {
                     log::error!("queue: {e}");
                 }
                 let path = filename.map(|n| folder.join(n));
-                self.running.insert(t.id, Running { kind, gen, eref, path, last_db: Instant::now() });
+                self.running.insert(t.id, Running { kind, gen, eref, path, last_db: Instant::now(), site: media_site(&t) });
                 self.report(self.db.apply_action(&[t.id], Action::Run));
             }
             Err(e) => self.fail(t.id, e).await,
@@ -451,13 +496,14 @@ impl Scheduler {
             }
             EngineEvent::Finished { path } => {
                 self.flush_one(id);
-                self.running.remove(&id);
+                self.end_running(id);
                 self.attempts.remove(&id);
                 if let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) {
                     let _ = self.db.set_meta(id, None, Some(&name), None);
                 }
                 if let Ok(Some(t)) = self.db.get_task(id) {
-                    let size = std::fs::metadata(&path).map(|m| m.len()).ok();
+                    // A folder (photo post pictures): keep the total the engine reported.
+                    let size = std::fs::metadata(&path).ok().filter(|m| m.is_file()).map(|m| m.len());
                     let _ = self.db.update_progress(id, size.unwrap_or(t.done).max(t.done), size.or(t.total), 0, 0);
                 }
                 let done = self.report(self.db.apply_action(&[id], Action::Complete));
@@ -469,10 +515,17 @@ impl Scheduler {
             }
             EngineEvent::Failed(e) => {
                 self.flush_one(id);
-                self.running.remove(&id);
+                self.end_running(id);
                 self.fail(id, e).await;
                 self.fill().await;
             }
+        }
+    }
+
+    /// A download ended by itself (finished or failed): its site waits a moment before the next.
+    fn end_running(&mut self, id: i64) {
+        if let Some(site) = self.running.remove(&id).and_then(|r| r.site) {
+            self.site_gap.insert(site, Instant::now() + (self.config)().site_gap);
         }
     }
 
@@ -655,12 +708,20 @@ mod tests {
         starts: Mutex<HashMap<i64, usize>>,
         calls: Mutex<Vec<String>>,
         stopped: Mutex<Vec<i64>>,
+        /// Act as the media engine instead of aria2.
+        media: bool,
+        /// Per host: (running now, most at once).
+        site_active: Arc<Mutex<HashMap<String, (usize, usize)>>>,
     }
 
     #[async_trait]
     impl Engine for Fake {
         fn kind(&self) -> EngineKind {
-            EngineKind::Aria2
+            if self.media {
+                EngineKind::Media
+            } else {
+                EngineKind::Aria2
+            }
         }
         async fn start(&self, spec: TaskSpec, ev: mpsc::Sender<EngineEvent>) -> Result<EngineRef> {
             let n = {
@@ -676,6 +737,14 @@ mod tests {
             let path = spec.folder.join(spec.filename.clone().unwrap_or_else(|| "x.bin".into()));
             let id = spec.task_id;
             let active = self.active.clone();
+            let host = self.media.then(|| url::Url::parse(&url).unwrap().host_str().unwrap().to_string());
+            if let Some(h) = &host {
+                let mut sa = self.site_active.lock();
+                let e = sa.entry(h.clone()).or_default();
+                e.0 += 1;
+                e.1 = e.1.max(e.0);
+            }
+            let site_active = self.site_active.clone();
             tokio::spawn(async move {
                 if url.ends_with("/slow") {
                     // Runs until cancelled (the channel closes when the scheduler forgets it).
@@ -704,6 +773,9 @@ mod tests {
                 }
                 let _ = std::fs::write(&path, vec![0u8; 300]);
                 active.fetch_sub(1, Ordering::SeqCst);
+                if let Some(h) = host {
+                    site_active.lock().entry(h).or_default().0 -= 1;
+                }
                 let _ = ev.send(EngineEvent::Finished { path }).await;
             });
             Ok(EngineRef { task_id: id, key: format!("g{id}-{n}") })
@@ -752,8 +824,12 @@ mod tests {
     }
 
     fn rig(cfg: RunConfig) -> Rig {
+        rig_with(cfg, Fake::default())
+    }
+
+    fn rig_with(cfg: RunConfig, fake: Fake) -> Rig {
         let db = Arc::new(Db::open_in_memory().unwrap());
-        let fake = Arc::new(Fake::default());
+        let fake = Arc::new(fake);
         let rec = Arc::new(Recorder::default());
         let (s, handle) = Scheduler::new(db.clone(), Engines::new(vec![fake.clone()]), rec.clone(), Arc::new(move || cfg.clone()));
         tokio::spawn(s.run());
@@ -794,7 +870,43 @@ mod tests {
     }
 
     fn cfg(par: usize) -> RunConfig {
-        RunConfig { max_parallel: par, retry_base: Duration::from_millis(20), ..Default::default() }
+        RunConfig { max_parallel: par, retry_base: Duration::from_millis(20), site_gap: Duration::from_millis(50), ..Default::default() }
+    }
+
+    #[test]
+    fn media_sites() {
+        assert_eq!(site_of("https://www.tiktok.com/@u/video/1", EngineKind::Media).as_deref(), Some("tiktok.com"));
+        assert_eq!(site_of("https://m.youtube.com/watch?v=a", EngineKind::Media).as_deref(), Some("youtube.com"));
+        assert_eq!(site_of("https://www.bbc.co.uk/iplayer/x", EngineKind::Media).as_deref(), Some("bbc.co.uk"));
+        assert_eq!(site_of("https://www.tiktok.com/@u/video/1", EngineKind::Aria2), None);
+    }
+
+    /// A profile's videos download one after another; another site runs alongside.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn media_from_one_site_runs_one_at_a_time() {
+        let r = rig_with(cfg(3), Fake { media: true, ..Default::default() });
+        let new: Vec<NewTask> = ["www.tiktok.com/@u/video/1", "www.tiktok.com/@u/video/2", "m.tiktok.com/@u/video/3", "www.youtube.com/watch", "www.tiktok.com/@u/video/4"]
+            .iter()
+            .enumerate()
+            .map(|(i, p)| NewTask {
+                url: format!("https://{p}/ok"),
+                engine: EngineKind::Media,
+                filename: Some(format!("m{i}.mp4")),
+                folder: r.dir.path().to_string_lossy().into_owned(),
+                category: "video".into(),
+                connections: 1,
+                options: serde_json::Value::Null,
+                ..Default::default()
+            })
+            .collect();
+        let ids: Vec<i64> = r.db.insert_tasks(&new).unwrap().into_iter().map(|t| t.id).collect();
+        r.handle.kick();
+        r.wait("all done", |r| ids.iter().all(|id| r.status(*id) == TaskStatus::Completed)).await;
+        let sa = r.fake.site_active.lock();
+        // www. and m. are the same site: never two TikTok downloads at once.
+        let tiktok_max = sa["www.tiktok.com"].1.max(sa["m.tiktok.com"].1);
+        assert_eq!(tiktok_max, 1, "{sa:?}");
+        assert_eq!(r.fake.max_active.load(Ordering::SeqCst), 2, "YouTube ran next to the TikTok queue, nothing more");
     }
 
     #[tokio::test(flavor = "multi_thread")]

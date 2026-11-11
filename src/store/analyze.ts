@@ -67,14 +67,20 @@ export async function downloadOption(card: Card, option: MediaOption) {
   }
 }
 
-/** Queue the ticked entries of a playlist card with one quality. */
-export async function downloadEntries(card: Card, entries: PlaylistEntry[], option: MediaOption) {
+/** Queue the ticked entries of a playlist card with one quality. Photo posts save their
+ *  pictures. `zip`: pack everything into one ZIP named after the profile/playlist. */
+export async function downloadEntries(card: Card, entries: PlaylistEntry[], option: MediaOption, zip = false) {
   if (!entries.length) return;
-  const items: MediaItem[] = entries.map((e) => ({ url: e.url, title: e.title, thumbnail: e.thumbnail, mediaId: e.id }));
+  const items: MediaItem[] = entries.map((e) => ({ url: e.url, title: e.title, thumbnail: e.thumbnail, mediaId: e.id, kind: e.kind }));
+  const name = card.info?.title || card.info?.uploader || "Downloads";
   try {
-    const added = await api.addMedia(items, option);
+    const added = await api.addMedia(items, option, null, zip && entries.length > 1 ? name : null);
     useAnalyze.getState().patch(card.key, { queued: new Set([...card.queued, option.label + option.kind]) });
-    toast({ kind: "success", title: `Added ${added.length} download${added.length === 1 ? "" : "s"}`, detail: `${card.info?.title ?? "Playlist"} · ${option.label}` });
+    toast({
+      kind: "success",
+      title: `Added ${added.length} download${added.length === 1 ? "" : "s"}`,
+      detail: `${name} · ${option.label}${zip && entries.length > 1 ? " · one ZIP when all are done" : ""}`,
+    });
   } catch (e) {
     toast({ kind: "error", title: "Could not add the playlist", detail: errorMessage(e) });
   }

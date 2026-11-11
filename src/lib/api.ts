@@ -7,6 +7,8 @@ export interface MediaItem {
   title?: string | null;
   thumbnail?: string | null;
   mediaId?: string | null;
+  /** "photo": a TikTok photo post — its pictures are saved, not its sound. */
+  kind?: "video" | "photo";
 }
 
 /** A newer release on GitHub (see src-tauri/src/commands/update.rs). */
@@ -34,7 +36,8 @@ export const api = {
   addLinks: (text: string, opts: { folder?: string | null; quality?: string | null; allowDuplicates?: boolean; asFile?: boolean } = {}) =>
     invoke<AddResult>("add_links", { text, folder: opts.folder ?? null, quality: opts.quality ?? null, allowDuplicates: opts.allowDuplicates ?? false, asFile: opts.asFile ?? false }),
   analyzeUrl: (url: string, playlist = false) => invoke<MediaInfo>("analyze_url", { url, playlist }),
-  addMedia: (items: MediaItem[], option: MediaOption, folder?: string | null) => invoke<Task[]>("add_media", { items, option, folder: folder ?? null }),
+  /** `zip`: download them into one folder and pack it into `<zip>.zip` when all have ended. */
+  addMedia: (items: MediaItem[], option: MediaOption, folder?: string | null, zip?: string | null) => invoke<Task[]>("add_media", { items, option, folder: folder ?? null, zip: zip ?? null }),
   toolsStatus: () => invoke<ToolInfo[]>("tools_status"),
   installTool: (id: string) => invoke<ToolInfo>("install_tool", { id }),
   importLinks: (path: string) => invoke<AddResult>("import_links", { path }),

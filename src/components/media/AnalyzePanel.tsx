@@ -1,9 +1,11 @@
-import { AlertTriangle, Check, Download, ExternalLink, Film, ListVideo, Music, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, Check, Download, Eye, ExternalLink, Film, Images, ListVideo, Music, RefreshCw, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, errorMessage } from "../../lib/api";
 import { cn, formatBytes } from "../../lib/format";
-import type { MediaOption } from "../../lib/types";
+import type { MediaOption, PlaylistEntry } from "../../lib/types";
 import { downloadEntries, downloadOption, useAnalyze, type Card } from "../../store/analyze";
+import { useSettings } from "../../store/settings";
 import { useUi } from "../../store/ui";
 import { toast } from "../../store/ui";
 import { Button, Select, Spinner } from "../ui/primitives";
@@ -32,31 +34,116 @@ function Th({ children, right, w }: { children?: React.ReactNode; right?: boolea
   return <th className={cn("px-2 py-1.5 text-[11px] font-semibold text-muted", right ? "text-right" : "text-left", w)}>{children}</th>;
 }
 
-function Thumb({ src, duration, live }: { src: string | null | undefined; duration?: number | null; live?: boolean }) {
+/**
+ * A thumbnail that can stay blurred (Settings → Media → Blur previews) until it is pressed
+ * and held. `enlarge`: while held, also show it big in the middle of the window (list rows).
+ */
+function HoldImage({ src, enlarge, className }: { src: string; enlarge?: boolean; className?: string }) {
+  const blur = useSettings((s) => s.settings.blurPreviews);
+  const [held, setHeld] = useState(false);
   const [broken, setBroken] = useState(false);
+  if (broken) return <Film className="h-1/2 w-1/2 text-faint" />;
+  const release = () => setHeld(false);
+  return (
+    <div
+      className={cn("relative h-full w-full select-none overflow-hidden", (blur || enlarge) && "cursor-zoom-in", className)}
+      title={held ? undefined : blur ? "Press and hold to see" : enlarge ? "Press and hold to enlarge" : undefined}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setHeld(true);
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
+      // Inside a list row's <label>: holding the picture must not tick the checkbox.
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setBroken(true)}
+        className={cn("h-full w-full object-cover transition-[filter,transform] duration-150", blur && !held && "scale-110 blur-md")}
+      />
+      {blur && !held && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="rounded-full bg-black/55 p-1 text-white">
+            <Eye className="h-3.5 w-3.5" />
+          </span>
+        </span>
+      )}
+      {enlarge &&
+        held &&
+        // On <body>: list rows use content-visibility, which would clip a fixed overlay to the row.
+        createPortal(
+          <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <img src={src} alt="" referrerPolicy="no-referrer" className="max-h-[75vh] max-w-[70vw] rounded-lg object-contain shadow-2xl" />
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+function Thumb({ src, duration, live }: { src: string | null | undefined; duration?: number | null; live?: boolean }) {
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-line bg-raised">
-      {src && !broken ? (
-        <img src={src} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+      {src ? (
+        <HoldImage key={src} src={src} />
       ) : (
         <div className="flex h-full items-center justify-center text-faint">
           <Film className="h-8 w-8" />
         </div>
       )}
       {live ? (
-        <span className="absolute bottom-1.5 right-1.5 rounded bg-danger px-1.5 py-0.5 text-[10px] font-semibold text-white">LIVE</span>
+        <span className="pointer-events-none absolute bottom-1.5 right-1.5 rounded bg-danger px-1.5 py-0.5 text-[10px] font-semibold text-white">LIVE</span>
       ) : duration ? (
-        <span className="absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">{formatDuration(duration)}</span>
+        <span className="pointer-events-none absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">{formatDuration(duration)}</span>
       ) : null}
     </div>
   );
 }
 
-function Meta({ label, value }: { label: string; value: React.ReactNode }) {
+/** Small thumbnail of one playlist/profile entry. */
+function RowThumb({ src }: { src: string | null }) {
+  return (
+    <div className="flex h-9 w-16 shrink-0 items-center justify-center overflow-hidden rounded border border-line bg-raised">
+      {src ? <HoldImage key={src} src={src} enlarge /> : <Film className="h-4 w-4 text-faint" />}
+    </div>
+  );
+}
+
+function TypeBadge({ e }: { e: PlaylistEntry }) {
+  if (e.kind === "photo")
+    return (
+      <span className="flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-500" title="Photo post: its pictures are saved as JPG files">
+        <Images className="h-3 w-3" />
+        Photos
+      </span>
+    );
+  return (
+    <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent">
+      <Film className="h-3 w-3" />
+      {e.section && e.section !== "Videos" ? e.section : "Video"}
+    </span>
+  );
+}
+
+function Meta({ label, value, wrap }: { label: string; value: React.ReactNode; wrap?: boolean }) {
   return (
     <div className="flex gap-3 text-[12px]">
       <span className="w-[70px] shrink-0 text-faint">{label}</span>
-      <span className="min-w-0 truncate">{value}</span>
+      <span className={cn("min-w-0", wrap ? "break-words" : "truncate")}>{value}</span>
     </div>
   );
 }
@@ -85,16 +172,18 @@ function CardError({ card }: { card: Card }) {
       toast({ kind: "error", title: "Could not add the link", detail: errorMessage(e) });
     }
   };
+  // 403: the site (TikTok above all) refuses anything that is not a signed-in browser.
+  const needsCookies = card.errorKind === "loginRequired" || card.errorKind === "forbidden";
   return (
     <div className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/5 p-3">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-medium">{card.errorKind === "drm" ? "Protected content — not supported" : "Could not read this link"}</div>
         <div className="mt-0.5 break-words text-[12px] text-muted">{card.error}</div>
-        {card.errorKind === "loginRequired" && <div className="mt-1 text-[12px] text-faint">Sign in to the site in your browser, then pick that browser in Settings → Media → Cookies.</div>}
+        {needsCookies && <div className="mt-1 text-[12px] text-faint">Sign in to the site in your browser, then pick that browser in Settings → Media → Cookies.</div>}
       </div>
       <div className="flex shrink-0 gap-1.5">
-        {card.errorKind === "loginRequired" && (
+        {needsCookies && (
           <Button size="sm" variant="default" onClick={() => useUi.getState().openDialog("settings")}>
             Settings
           </Button>
@@ -226,17 +315,58 @@ function SingleCard({ card }: { card: Card }) {
   );
 }
 
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** What a profile/channel holds: "66 videos · 14 photo posts", "200 Videos · 1495 Shorts". */
+function countText(entries: PlaylistEntry[]): string {
+  const photos = entries.filter((e) => e.kind === "photo").length;
+  const sections = new Map<string, number>();
+  for (const e of entries) if (e.kind === "video" && e.section) sections.set(e.section, (sections.get(e.section) ?? 0) + 1);
+  const parts = sections.size > 1 ? [...sections].map(([name, n]) => `${n} ${name}`) : [plural(entries.length - photos, "video")];
+  if (photos) parts.push(plural(photos, "photo post"));
+  return parts.join(" · ");
+}
+
+/** Quick picks next to "Select all": by type (TikTok photo posts) or by channel tab. */
+function quickPicks(entries: PlaylistEntry[]): { label: string; icon: typeof Film; ids: string[] }[] {
+  const ids = (f: (e: PlaylistEntry) => boolean) => entries.filter(f).map((e) => e.id);
+  if (entries.some((e) => e.kind === "photo"))
+    return [
+      { label: "Only videos", icon: Film, ids: ids((e) => e.kind === "video") },
+      { label: "Only photos", icon: Images, ids: ids((e) => e.kind === "photo") },
+    ];
+  const sections = [...new Set(entries.map((e) => e.section).filter((x): x is string => !!x))];
+  return sections.length > 1 ? sections.map((name) => ({ label: `Only ${name.toLowerCase()}`, icon: Film, ids: ids((e) => e.section === name) })) : [];
+}
+
 function PlaylistCard({ card }: { card: Card }) {
   const info = card.info!;
   const picked = card.picked ?? new Set<string>();
   const options = useMemo(() => [...info.video, ...info.audio.map((o) => ({ ...o, label: o.label === "Best" ? "Audio (M4A)" : o.label }))], [info]);
+  const picks = useMemo(() => quickPicks(info.entries), [info]);
   const [choice, setChoice] = useState(0);
+  const [zip, setZip] = useState(() => {
+    try {
+      return localStorage.getItem("ensave.zipBulk") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleZip = (on: boolean) => {
+    setZip(on);
+    try {
+      localStorage.setItem("ensave.zipBulk", on ? "1" : "0");
+    } catch {
+      /* private mode: just this card */
+    }
+  };
   const all = picked.size === info.entries.length;
+  const setPicked = (ids: Iterable<string>) => useAnalyze.getState().patch(card.key, { picked: new Set(ids) });
   const toggle = (id: string) => {
     const next = new Set(picked);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    useAnalyze.getState().patch(card.key, { picked: next });
+    setPicked(next);
   };
   const selected = info.entries.filter((e) => picked.has(e.id));
   return (
@@ -246,35 +376,60 @@ function PlaylistCard({ card }: { card: Card }) {
         <div className="line-clamp-3 text-[14px] font-semibold leading-snug">{info.title}</div>
         <div className="space-y-1">
           <Meta label="Platform" value={info.platform} />
-          <Meta label="Items" value={info.entries.length} />
+          <Meta label="Items" value={countText(info.entries)} wrap />
           {info.uploader && <Meta label="Uploader" value={info.uploader} />}
         </div>
       </div>
       <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-[12px]">
-            <input type="checkbox" className="accent-[rgb(var(--accent))]" checked={all} onChange={() => useAnalyze.getState().patch(card.key, { picked: all ? new Set() : new Set(info.entries.map((e) => e.id)) })} />
+            <input type="checkbox" className="accent-[rgb(var(--accent))]" checked={all} onChange={() => setPicked(all ? [] : info.entries.map((e) => e.id))} />
             Select all
           </label>
+          {picks.length > 0 && (
+            <div className="flex overflow-hidden rounded-md border border-line">
+              {picks.map((p) => {
+                const Icon = p.icon;
+                const active = p.ids.length > 0 && p.ids.length === picked.size && p.ids.every((id) => picked.has(id));
+                return (
+                  <button
+                    key={p.label}
+                    className={cn("flex items-center gap-1 border-r border-line px-2 py-1 text-[11px] last:border-0", active ? "bg-accent/15 text-accent" : "text-muted hover:bg-raised hover:text-fg")}
+                    title={`Tick only these (${p.ids.length})`}
+                    onClick={() => setPicked(p.ids)}
+                  >
+                    <Icon className="h-3 w-3" />
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <span className="text-[12px] text-faint">
             {selected.length} of {info.entries.length} selected
           </span>
           <div className="flex-1" />
           <Select value={choice} onChange={(v) => setChoice(v)} options={options.map((o, i) => ({ value: i, label: o.kind === "audio" ? o.label : `Video · ${o.label}` }))} />
-          <Button variant="primary" size="sm" disabled={!selected.length} onClick={() => void downloadEntries(card, selected, options[choice])}>
+          <label className="flex items-center gap-1.5 text-[12px]" title={`Download into one folder, then pack it into "${info.title}.zip" when every item is done`}>
+            <input type="checkbox" className="accent-[rgb(var(--accent))]" checked={zip} onChange={(e) => toggleZip(e.target.checked)} />
+            One ZIP
+          </label>
+          <Button variant="primary" size="sm" disabled={!selected.length} onClick={() => void downloadEntries(card, selected, options[choice], zip)}>
             <Download className="h-3.5 w-3.5" />
             Download {selected.length || ""}
           </Button>
         </div>
-        <div className="max-h-[260px] overflow-y-auto rounded-lg border border-line">
+        <div className="max-h-[360px] overflow-y-auto rounded-lg border border-line">
           {info.entries.map((e, i) => (
-            <label key={e.id + i} className="flex cursor-pointer items-center gap-3 border-b border-line/50 px-3 py-1.5 text-[12px] last:border-0 hover:bg-raised/40">
+            <label key={e.id + i} className="flex cursor-pointer items-center gap-3 border-b [contain-intrinsic-size:auto_49px] [content-visibility:auto] border-line/50 px-3 py-1.5 text-[12px] last:border-0 hover:bg-raised/40">
               <input type="checkbox" className="accent-[rgb(var(--accent))]" checked={picked.has(e.id)} onChange={() => toggle(e.id)} />
               <span className="w-7 shrink-0 text-right tabular-nums text-faint">{i + 1}</span>
+              <RowThumb src={e.thumbnail} />
               <span className="min-w-0 flex-1 truncate" title={e.title}>
-                {e.title}
+                {e.title || `Item ${i + 1}`}
               </span>
-              <span className="shrink-0 tabular-nums text-faint">{formatDuration(e.duration)}</span>
+              <TypeBadge e={e} />
+              <span className="w-12 shrink-0 text-right tabular-nums text-faint">{formatDuration(e.duration)}</span>
             </label>
           ))}
         </div>
@@ -299,9 +454,12 @@ function AnalyzeCard({ card }: { card: Card }) {
       {card.state === "loading" && (
         <div className="grid grid-cols-[230px_minmax(0,1fr)] gap-5">
           <div className="aspect-video animate-pulse rounded-lg bg-raised" />
-          <div className="flex items-center gap-2 text-[13px] text-muted">
-            <Spinner className="h-4 w-4" />
-            Reading the page and the available qualities…
+          <div className="flex flex-col justify-center gap-1">
+            <div className="flex items-center gap-2 text-[13px] text-muted">
+              <Spinner className="h-4 w-4" />
+              Reading the page and the available qualities…
+            </div>
+            <div className="pl-6 text-[11px] text-faint">Profiles and channels with many posts can take a minute or two.</div>
           </div>
         </div>
       )}

@@ -44,10 +44,16 @@ export const useTasks = create<TaskStore>((set, get) => ({
     const un1 = listen<Task[]>("tasks-upsert", (e) => get().upsert(e.payload));
     const un2 = listen<number[]>("tasks-removed", (e) => get().removeLocal(e.payload));
     const un3 = listen<ProgressItem[]>("tasks-progress", (e) => get().applyProgress(e.payload));
+    // A bulk download was packed into its ZIP.
+    const un4 = listen<{ name: string; path?: string; files?: number; error?: string }>("batch-zipped", ({ payload: z }) => {
+      if (z.error) toast({ kind: "error", title: `Could not make ${z.name}`, detail: z.error });
+      else toast({ kind: "success", title: `${z.name} is ready`, detail: `${z.files} file${z.files === 1 ? "" : "s"} packed`, action: z.path ? { label: "Show", run: () => void api.revealPath(z.path!).catch(() => {}) } : undefined }, 8000);
+    });
     return () => {
       un1.then((f) => f());
       un2.then((f) => f());
       un3.then((f) => f());
+      un4.then((f) => f());
     };
   },
 
